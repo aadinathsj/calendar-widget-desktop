@@ -82,14 +82,22 @@ async function getCalendarEvents(startDate, endDate) {
         $teamsLink = $null
         $location = $item.Location
 
-        # Try to extract Teams link from body
-        if ($item.Body -match 'https://teams\\.microsoft\\.com/l/meetup-join/[^\\s<>"]+') {
+        # Extract Teams join link - supports both URL formats:
+        #   Old: https://teams.microsoft.com/l/meetup-join/...
+        #   New: https://teams.microsoft.com/meet/...
+        if ($item.Body -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^\\s<>"]+') {
           $teamsLink = $matches[0]
         }
 
-        # Check if it's a Teams meeting
-        if ($item.IsOnlineMeeting) {
-          # Try to get online meeting URL
+        # Fallback: check HTMLBody - some received invites only have the link in HTML
+        if (-not $teamsLink -and $item.HTMLBody) {
+          if ($item.HTMLBody -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^"\\s]+') {
+            $teamsLink = $matches[0]
+          }
+        }
+
+        # Fallback: OnlineMeetingConfLink (only populated for meetings you organised)
+        if (-not $teamsLink -and $item.IsOnlineMeeting) {
           try {
             if ($item.OnlineMeetingConfLink) {
               $teamsLink = $item.OnlineMeetingConfLink

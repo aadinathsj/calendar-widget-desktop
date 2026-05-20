@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const { getCalendarEvents, checkOutlookAvailable } = require('./services/outlookService');
@@ -22,7 +22,7 @@ function createWindow() {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     skipTaskbar: false,
     resizable: false,
     icon: iconExists ? iconPath : undefined,
@@ -128,6 +128,10 @@ ipcMain.handle('close-window', () => {
   if (mainWindow) {
     mainWindow.close();
   }
+});
+
+ipcMain.handle('open-external', (event, url) => {
+  shell.openExternal(url);
 });
 
 ipcMain.handle('get-notes-directory', () => {

@@ -15,9 +15,6 @@ let isSaving = false;
 // Action card expanded state (in-memory)
 let expandedActions = new Set();
 
-// Countdown timer
-let countdownInterval = null;
-
 // Initialize the app
 async function init() {
   setupEventListeners();
@@ -258,19 +255,19 @@ async function autoSaveNotes() {
     );
 
     if (result.success) {
-      statusEl.textContent = 'Saved';
+      statusEl.textContent = '✓ Saved';
 
       // Fade out after 2 seconds
       setTimeout(() => {
-        if (statusEl.textContent === 'Saved') {
+        if (statusEl.textContent === '✓ Saved') {
           statusEl.textContent = '';
         }
       }, 2000);
     } else {
-      statusEl.textContent = 'Error: ' + result.error;
+      statusEl.textContent = '✗ Error: ' + result.error;
     }
   } catch (error) {
-    statusEl.textContent = 'Error: ' + error.message;
+    statusEl.textContent = '✗ Error: ' + error.message;
   } finally {
     isSaving = false;
   }
@@ -424,50 +421,6 @@ function displayEvents(events) {
 
   // Update keyboard navigation array
   updateEventCardsArray();
-
-  // Start / restart the per-minute countdown refresh
-  startCountdownTimer();
-}
-
-// ===== COUNTDOWN HELPERS =====
-
-function getCountdownText(start, end) {
-  const now = new Date();
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-
-  if (now >= endDate) return { text: 'Done', cls: 'done' };
-  if (now >= startDate) return { text: 'Now', cls: 'now' };
-
-  const diffMins = Math.round((startDate - now) / 60000);
-  const hours = Math.floor(diffMins / 60);
-  const mins = diffMins % 60;
-
-  let text;
-  if (hours >= 24) {
-    text = `Join in ${Math.floor(hours / 24)}d`;
-  } else if (hours > 0) {
-    text = mins > 0 ? `Join in ${hours}h ${mins}m` : `Join in ${hours}h`;
-  } else {
-    text = `Join in ${mins}m`;
-  }
-
-  return { text, cls: diffMins <= 15 ? 'soon' : 'upcoming' };
-}
-
-function startCountdownTimer() {
-  if (countdownInterval) clearInterval(countdownInterval);
-  countdownInterval = setInterval(updateAllCountdowns, 60000);
-}
-
-function updateAllCountdowns() {
-  document.querySelectorAll('.event-card[data-event-start]').forEach(card => {
-    const el = card.querySelector('.event-countdown');
-    if (!el) return;
-    const { text, cls } = getCountdownText(card.dataset.eventStart, card.dataset.eventEnd);
-    el.textContent = text;
-    el.className = `event-countdown event-countdown--${cls}`;
-  });
 }
 
 function createEventCard(event) {
@@ -489,40 +442,13 @@ function createEventCard(event) {
     hour12: true
   });
 
-  card.dataset.eventStart = event.start;
-  card.dataset.eventEnd = event.end;
-
-  const countdown = getCountdownText(event.start, event.end);
-
   card.innerHTML = `
-    <div class="event-card-body">
-      <div class="event-time-row">
-        <div class="event-time">${startTime} – ${endTime}</div>
-        <span class="event-countdown event-countdown--${countdown.cls}">${countdown.text}</span>
-      </div>
-      <div class="event-title">${escapeHtml(event.subject)}</div>
-      ${(event.location || event.organizer) ? `
-        <div class="event-meta">
-          ${event.location ? `
-            <span class="event-meta-item">
-              <svg width="11" height="11" aria-hidden="true"><use href="#icon-location"/></svg>
-              ${escapeHtml(event.location)}
-            </span>
-          ` : ''}
-          ${event.organizer ? `
-            <span class="event-meta-item">
-              <svg width="11" height="11" aria-hidden="true"><use href="#icon-user"/></svg>
-              ${escapeHtml(event.organizer)}
-            </span>
-          ` : ''}
-        </div>
-      ` : ''}
-      ${event.teamsLink ? `
-        <a href="#" class="teams-join-link" data-teams-url="${escapeHtml(event.teamsLink)}">
-          <svg width="12" height="12" aria-hidden="true"><use href="#icon-video"/></svg>
-          Join Teams
-        </a>
-      ` : ''}
+    <div class="event-time">${startTime} - ${endTime}</div>
+    <div class="event-title">${escapeHtml(event.subject)}</div>
+    <div class="event-details">
+      ${event.location ? `<div>📍 ${escapeHtml(event.location)}</div>` : ''}
+      ${event.organizer ? `<div>👤 ${escapeHtml(event.organizer)}</div>` : ''}
+      ${event.teamsLink ? `<a href="#" class="teams-link" data-teams-url="${escapeHtml(event.teamsLink)}">🎥 Join Teams Meeting</a>` : ''}
     </div>
   `;
 
@@ -530,7 +456,7 @@ function createEventCard(event) {
 
   // Handle Teams link click - convert to msteams:// protocol and stop propagation
   if (event.teamsLink) {
-    const teamsLink = card.querySelector('.teams-join-link');
+    const teamsLink = card.querySelector('.teams-link');
     if (teamsLink) {
       teamsLink.addEventListener('click', (e) => {
         e.preventDefault();
@@ -650,17 +576,17 @@ async function saveNotes() {
     );
 
     if (result.success) {
-      statusEl.textContent = 'Saved';
+      statusEl.textContent = '✓ Saved';
       setTimeout(() => {
-        if (statusEl.textContent === 'Saved') {
+        if (statusEl.textContent === '✓ Saved') {
           statusEl.textContent = '';
         }
       }, 2000);
     } else {
-      statusEl.textContent = 'Error: ' + result.error;
+      statusEl.textContent = '✗ Error: ' + result.error;
     }
   } catch (error) {
-    statusEl.textContent = 'Error: ' + error.message;
+    statusEl.textContent = '✗ Error: ' + error.message;
   } finally {
     isSaving = false;
   }
@@ -692,10 +618,7 @@ function displayActions() {
 
   actionsList.innerHTML = '';
 
-  // Pinned actions float to the top
-  const sorted = [...actions].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-  sorted.forEach(action => {
+  actions.forEach(action => {
     const actionCard = createActionCard(action);
     actionsList.appendChild(actionCard);
   });
@@ -715,22 +638,19 @@ function createActionCard(action) {
     <div class="action-header">
       <div class="action-content">
         <div class="action-title">${escapeHtml(action.title)}</div>
+        <div class="action-url">${escapeHtml(action.url)}</div>
       </div>
       <div class="action-buttons">
         <button class="action-expand-btn" aria-label="Expand/Collapse" title="Expand/Collapse">
-          <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-chevron-down"/></svg>
+          <svg class="icon" width="16" height="16" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </button>
-        <button class="action-pin-btn${action.pinned ? ' pinned' : ''}" aria-label="${action.pinned ? 'Unpin' : 'Pin to top'}" title="${action.pinned ? 'Unpin' : 'Pin to top'}">
-          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-pin"/></svg>
-        </button>
-        ${action.url ? '<button class="action-open-btn">Open</button>' : ''}
-        <button class="action-delete-btn" aria-label="Delete action" title="Delete action">
-          <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"/></svg>
-        </button>
+        <button class="action-open-btn">Open</button>
+        <button class="action-delete-btn" aria-label="Delete action" title="Delete action">×</button>
       </div>
     </div>
     <div class="action-details">
-      ${action.url ? `<div class="action-url">${escapeHtml(action.url)}</div>` : ''}
       <div class="form-group">
         <label>Note</label>
         <textarea class="action-note" placeholder="Add notes about this action..." rows="3">${escapeHtml(action.note || '')}</textarea>
@@ -740,7 +660,6 @@ function createActionCard(action) {
 
   // Add event listeners (not using onclick to properly handle events)
   const expandBtn = card.querySelector('.action-expand-btn');
-  const pinBtn   = card.querySelector('.action-pin-btn');
   const openBtn = card.querySelector('.action-open-btn');
   const deleteBtn = card.querySelector('.action-delete-btn');
   const noteArea = card.querySelector('.action-note');
@@ -751,19 +670,11 @@ function createActionCard(action) {
     toggleActionExpand(action.id, card);
   });
 
-  // Pin/unpin handler
-  pinBtn.addEventListener('click', (e) => {
+  // Open action handler
+  openBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    pinAction(action.id);
+    openAction(action.url);
   });
-
-  // Open action handler (only if URL exists)
-  if (openBtn && action.url) {
-    openBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openAction(action.url);
-    });
-  }
 
   // Delete action handler with proper error handling
   deleteBtn.addEventListener('click', (e) => {
@@ -847,7 +758,7 @@ async function deleteAction(actionId) {
 }
 
 function openAction(url) {
-  window.electronAPI.openExternal(url);
+  window.open(url, '_blank');
 }
 
 // Toggle action card expand/collapse
@@ -858,19 +769,6 @@ function toggleActionExpand(actionId, cardElement) {
   } else {
     expandedActions.add(actionId);
     cardElement.classList.add('expanded');
-  }
-}
-
-// Pin / unpin action and re-sort
-async function pinAction(actionId) {
-  const action = actions.find(a => a.id === actionId);
-  if (!action) return;
-  action.pinned = !action.pinned;
-  try {
-    await window.electronAPI.saveActions(actions);
-    displayActions();
-  } catch (error) {
-    console.error('Error pinning action:', error);
   }
 }
 
@@ -905,11 +803,12 @@ function openTeamsLink(teamsUrl) {
       finalUrl = teamsUrl.replace('https://', 'msteams://');
     }
 
-    // Open via OS — launches Teams app or falls back to browser
-    window.electronAPI.openExternal(finalUrl);
+    // Open the Teams app using the protocol URL
+    window.open(finalUrl, '_blank');
   } catch (error) {
     console.error('Error opening Teams link:', error);
-    window.electronAPI.openExternal(teamsUrl);
+    // Fallback to original URL if conversion fails
+    window.open(teamsUrl, '_blank');
   }
 }
 

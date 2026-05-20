@@ -7,63 +7,218 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- SVG Icon Sprite -->
+  <svg style="display: none;" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <!-- Calendar Icon -->
+      <symbol id="icon-calendar" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Lightning Bolt Icon -->
+      <symbol id="icon-lightning" viewBox="0 0 24 24">
+        <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Location Pin Icon -->
+      <symbol id="icon-location" viewBox="0 0 24 24">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="10" r="3" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- User/Person Icon -->
+      <symbol id="icon-user" viewBox="0 0 24 24">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="7" r="4" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Video Camera Icon -->
+      <symbol id="icon-video" viewBox="0 0 24 24">
+        <path d="M23 7l-7 5 7 5V7z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="1" y="5" width="15" height="14" rx="2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Checkmark Icon -->
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <polyline points="20 6 9 17 4 12" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- X/Close Icon -->
+      <symbol id="icon-x" viewBox="0 0 24 24">
+        <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Refresh Icon -->
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M23 4v6h-6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M1 20v-6h6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Chevron Left Icon -->
+      <symbol id="icon-chevron-left" viewBox="0 0 24 24">
+        <polyline points="15 18 9 12 15 6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Chevron Right Icon -->
+      <symbol id="icon-chevron-right" viewBox="0 0 24 24">
+        <polyline points="9 18 15 12 9 6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Chevron Down Icon -->
+      <symbol id="icon-chevron-down" viewBox="0 0 24 24">
+        <polyline points="6 9 12 15 18 9" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Plus Icon -->
+      <symbol id="icon-plus" viewBox="0 0 24 24">
+        <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Link Icon -->
+      <symbol id="icon-link" viewBox="0 0 24 24">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Trash Icon -->
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <polyline points="3 6 5 6 21 6" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Edit/Pencil Icon -->
+      <symbol id="icon-edit" viewBox="0 0 24 24">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Minus / Minimise Icon -->
+      <symbol id="icon-minus" viewBox="0 0 24 24">
+        <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Pin / Thumbtack Icon -->
+      <symbol id="icon-pin" viewBox="0 0 24 24">
+        <line x1="12" y1="17" x2="12" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 17h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 17V9.5a4 4 0 0 1 8 0V17" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="12" y1="5.5" x2="12" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <div id="app">
     <div class="glass-container">
       <div class="window-controls">
-        <button id="minimize-btn" class="control-btn">_</button>
-        <button id="close-btn" class="control-btn">×</button>
+        <button id="minimize-btn" class="control-btn" aria-label="Minimize window">
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-minus"/></svg>
+        </button>
+        <button id="close-btn" class="control-btn" aria-label="Close window">
+          <svg class="icon" width="12" height="12" aria-hidden="true"><use href="#icon-x"/></svg>
+        </button>
       </div>
 
       <div id="login-screen" class="screen">
         <div class="login-container">
-          <h2>📅 Calendar Widget</h2>
+          <h2>
+            <svg class="icon" width="24" height="24" aria-hidden="true">
+              <use href="#icon-calendar"/>
+            </svg>
+            Calendar Widget
+          </h2>
           <p id="status-message">Checking for Outlook...</p>
           <button id="retry-btn" class="primary-btn hidden">Retry Connection</button>
         </div>
       </div>
 
       <div id="main-screen" class="screen hidden">
-        <div class="tab-nav">
-          <button id="calendar-tab" class="tab-btn active">📅 Calendar</button>
-          <button id="actions-tab" class="tab-btn">⚡ Actions</button>
+        <div class="tab-nav" role="tablist">
+          <button id="calendar-tab" class="tab-btn active" role="tab" aria-selected="true" aria-controls="calendar-content">
+            <svg class="icon" width="18" height="18" aria-hidden="true">
+              <use href="#icon-calendar"/>
+            </svg>
+            <span>Calendar</span>
+          </button>
+          <button id="actions-tab" class="tab-btn" role="tab" aria-selected="false" aria-controls="actions-content">
+            <svg class="icon" width="18" height="18" aria-hidden="true">
+              <use href="#icon-lightning"/>
+            </svg>
+            <span>Actions</span>
+          </button>
+          <button id="refresh-btn" class="tab-btn tab-btn-icon-only" aria-label="Refresh events">
+            <svg class="icon" width="18" height="18" aria-hidden="true">
+              <use href="#icon-refresh"/>
+            </svg>
+          </button>
         </div>
 
         <div class="content">
           <!-- Calendar Tab -->
-          <div id="calendar-content" class="tab-content">
+          <div id="calendar-content" class="tab-content" role="tabpanel" aria-labelledby="calendar-tab">
             <div class="date-navigation">
-              <button id="prev-day" class="nav-btn">←</button>
-              <span id="current-date"></span>
-              <button id="next-day" class="nav-btn">→</button>
-            </div>
-
-            <button id="refresh-btn" class="refresh-btn">↻ Refresh</button>
-
-            <div id="events-list"></div>
-          </div>
-
-          <!-- Actions Tab -->
-          <div id="actions-content" class="tab-content hidden">
-            <div class="actions-header">
-              <button id="add-action-btn" class="add-action-btn">
-                <span>+</span> Add Action
+              <button id="prev-day" class="nav-btn" aria-label="Previous day">
+                <svg class="icon" width="20" height="20" aria-hidden="true">
+                  <use href="#icon-chevron-left"/>
+                </svg>
+              </button>
+              <span id="current-date" aria-live="polite"></span>
+              <button id="next-day" class="nav-btn" aria-label="Next day">
+                <svg class="icon" width="20" height="20" aria-hidden="true">
+                  <use href="#icon-chevron-right"/>
+                </svg>
               </button>
             </div>
 
-            <div id="actions-list"></div>
+            <div class="scroll-container">
+              <div class="scroll-fade scroll-fade-top" aria-hidden="true"></div>
+              <div id="events-list" class="scrollable" role="list" aria-label="Calendar events"></div>
+              <div class="scroll-fade scroll-fade-bottom" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <!-- Actions Tab -->
+          <div id="actions-content" class="tab-content hidden" role="tabpanel" aria-labelledby="actions-tab">
+            <div class="actions-header">
+              <button id="add-action-btn" class="add-action-btn" aria-label="Add new action">
+                <svg class="icon" width="18" height="18" aria-hidden="true">
+                  <use href="#icon-plus"/>
+                </svg>
+                Add Action
+              </button>
+            </div>
+
+            <div class="scroll-container">
+              <div class="scroll-fade scroll-fade-top" aria-hidden="true"></div>
+              <div id="actions-list" class="scrollable" role="list" aria-label="Quick actions"></div>
+              <div class="scroll-fade scroll-fade-bottom" aria-hidden="true"></div>
+            </div>
           </div>
 
           <!-- Notes View -->
           <div id="notes-view" class="notes-container hidden">
             <div class="notes-header">
               <h3 id="notes-meeting-title"></h3>
-              <button id="close-notes-btn" class="close-notes">×</button>
+              <button id="close-notes-btn" class="close-notes" aria-label="Close notes">
+                <svg class="icon" width="20" height="20" aria-hidden="true">
+                  <use href="#icon-x"/>
+                </svg>
+              </button>
             </div>
             <div class="notes-metadata" id="notes-metadata"></div>
-            <textarea id="notes-editor" placeholder="Type your meeting notes here..."></textarea>
+            <div class="scroll-container">
+              <div class="scroll-fade scroll-fade-top" aria-hidden="true"></div>
+              <textarea id="notes-editor" class="scrollable" placeholder="Type your meeting notes here..." aria-label="Meeting notes editor"></textarea>
+              <div class="scroll-fade scroll-fade-bottom" aria-hidden="true"></div>
+            </div>
             <div class="notes-actions">
               <button id="save-notes-btn" class="primary-btn">Save Notes</button>
-              <span id="notes-status"></span>
+              <span id="notes-status" aria-live="polite"></span>
             </div>
           </div>
         </div>
@@ -72,17 +227,21 @@
   </div>
 
   <!-- Add Action Modal -->
-  <div id="action-modal" class="modal-overlay hidden">
+  <div id="action-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal">
-      <h3>Add New Action</h3>
+      <h3 id="modal-title">Add New Action</h3>
       <form id="action-form">
         <div class="form-group">
           <label for="action-title-input">Title</label>
-          <input type="text" id="action-title-input" placeholder="e.g., Activate Azure Role" required>
+          <input type="text" id="action-title-input" placeholder="e.g., Activate Azure Role" required aria-required="true">
         </div>
         <div class="form-group">
-          <label for="action-url-input">URL</label>
-          <input type="url" id="action-url-input" placeholder="https://..." required>
+          <label for="action-note-input">Note (Optional)</label>
+          <textarea id="action-note-input" placeholder="Add a description or reminder..." rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="action-url-input">URL (Optional)</label>
+          <input type="url" id="action-url-input" placeholder="https://...">
         </div>
         <div class="modal-actions">
           <button type="button" id="cancel-action-btn" class="modal-btn modal-btn-secondary">Cancel</button>

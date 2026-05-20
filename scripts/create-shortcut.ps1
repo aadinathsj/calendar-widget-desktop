@@ -120,5 +120,26 @@ $shortcut.Save()
 Write-Host ""
 Write-Host "Desktop shortcut created:" -ForegroundColor Green
 Write-Host "  $shortcutPath"
+
+# ── 6. Attempt to pin to Taskbar ───────────────────────────────────────────
 Write-Host ""
-Write-Host "Double-click it to launch Calendar Widget."
+Write-Host "Attempting to pin to Taskbar..." -ForegroundColor Cyan
+try {
+  $shell   = New-Object -ComObject "Shell.Application"
+  $folder  = $shell.Namespace([System.IO.Path]::GetDirectoryName($shortcutPath))
+  $file    = $folder.ParseName([System.IO.Path]::GetFileName($shortcutPath))
+  $pinVerb = $file.Verbs() | Where-Object { ($_.Name -replace '&','') -match 'Pin to [Tt]askbar' }
+  if ($pinVerb) {
+    $pinVerb | Select-Object -First 1 | ForEach-Object { $_.DoIt() }
+    Write-Host "Pinned to Taskbar successfully." -ForegroundColor Green
+  } else {
+    Write-Warning "Auto-pin unavailable on this Windows version."
+    Write-Host "  To pin manually: right-click the desktop shortcut -> 'Pin to taskbar'" -ForegroundColor Yellow
+  }
+} catch {
+  Write-Warning "Taskbar pin failed: $_"
+  Write-Host "  To pin manually: right-click the desktop shortcut -> 'Pin to taskbar'" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "Double-click the desktop shortcut to launch Calendar Widget."

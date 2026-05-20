@@ -1,385 +1,490 @@
-# Setup Guide for Calendar Widget
+# Setup Guide — Calendar Widget
 
-## Overview
+A desktop widget that surfaces your Outlook calendar directly on your Windows desktop — no cloud setup, no Azure registration, no authentication tokens required.
 
-This calendar widget works **directly with your local Outlook installation** using Windows COM automation. No cloud setup, no Azure registration, no authentication required!
+---
 
-## System Requirements
+## Table of Contents
 
-### Required
-- **Operating System**: Windows 10 or Windows 11
-- **Microsoft Outlook**: Any recent version (2016, 2019, 2021, or Microsoft 365)
-- **Node.js**: Version 16 or later ([Download here](https://nodejs.org/))
+1. [Prerequisites](#1-prerequisites)
+2. [Clone the Repository](#2-clone-the-repository)
+3. [Install Dependencies](#3-install-dependencies)
+4. [Launch the Widget](#4-launch-the-widget)
+5. [Create a Desktop Shortcut](#5-create-a-desktop-shortcut)
+6. [Feature Walkthrough](#6-feature-walkthrough)
+7. [Configuration](#7-configuration)
+8. [Build a Production Installer](#8-build-a-production-installer)
+9. [Development Mode](#9-development-mode)
+10. [Project Structure](#10-project-structure)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Security & Privacy](#12-security--privacy)
+13. [Advanced Customization](#13-advanced-customization)
+14. [Upgrading & Uninstalling](#14-upgrading--uninstalling)
 
-### Verification
+---
 
-Check if you have the requirements:
+## 1. Prerequisites
+
+| Requirement | Version / Notes |
+|---|---|
+| **OS** | Windows 10 or Windows 11 |
+| **Microsoft Outlook** | 2016, 2019, 2021, or Microsoft 365 — must be **installed and running** |
+| **Node.js** | v16 or later — [Download](https://nodejs.org/) |
+| **Git** | Any recent version — [Download](https://git-scm.com/) |
+
+### Verify your environment
+
+Open **PowerShell** and run:
 
 ```powershell
-# Check Node.js version
+# Node.js — should print v16.x.x or higher
 node --version
 
-# Check if Outlook is installed (should return path)
-Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\App` Paths\OUTLOOK.EXE -ErrorAction SilentlyContinue
+# npm — comes with Node.js
+npm --version
+
+# Confirm Outlook is installed
+Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\App Paths\OUTLOOK.EXE" -ErrorAction SilentlyContinue
 ```
 
-## Installation Steps
+If `node --version` fails, install Node.js and restart your terminal before continuing.
 
-### 1. Clone or Download the Project
+---
 
-If you haven't already, navigate to your project directory:
+## 2. Clone the Repository
+
 ```bash
-cd "c:\Users\FS150419\OneDrive - First Solar\Documents\Projects\calendar-widget"
+git clone https://github.com/aadinathsj/calendar-widget-desktop.git
+cd calendar-widget-desktop
 ```
 
-### 2. Install Dependencies
+If you already have the folder, just navigate into it:
+
+```bash
+cd path\to\calendar-widget-desktop
+```
+
+---
+
+## 3. Install Dependencies
 
 ```bash
 npm install
 ```
 
 This installs:
-- Electron (desktop app framework)
-- electron-store (settings storage)
-- markdown-it (Markdown rendering, if needed)
 
-### 3. Ensure Outlook is Running
+| Package | Purpose |
+|---|---|
+| `electron` | Desktop app framework (dev dependency) |
+| `electron-builder` | Packaging/installer toolchain (dev dependency) |
+| `markdown-it` | Markdown rendering for meeting notes |
 
-**Important**: The widget needs Outlook to be running to access your calendar.
+> **Proxy / corporate network users:** If `npm install` hangs, configure your proxy:
+> ```bash
+> npm config set proxy http://proxy.example.com:8080
+> npm config set https-proxy http://proxy.example.com:8080
+> ```
 
-1. Open Microsoft Outlook
-2. Make sure your email account is configured
-3. Outlook can be minimized (it doesn't need to be visible)
+---
 
-### 4. Run the Widget
+## 4. Launch the Widget
+
+Make sure **Microsoft Outlook is open** (it can be minimized), then:
 
 ```bash
 npm start
 ```
 
 The widget will:
-1. Open in the top-right corner of your screen
-2. Check for Outlook
-3. Connect to your calendar
-4. Display today's meetings
+1. Appear in the **top-right corner** of your primary display
+2. Check that Outlook is accessible via COM
+3. Load today's calendar events automatically
 
-## How It Works
+> If Outlook is not running you will see a "Retry Connection" prompt — open Outlook and click **Retry**.
 
-The widget uses **Windows COM Automation** to communicate with Outlook:
+---
 
+## 5. Create a Desktop Shortcut
+
+To launch the widget with a double-click — without opening a terminal — run:
+
+```bash
+npm run shortcut
 ```
-Widget (Electron) → PowerShell Script → Outlook COM API → Your Calendar
-```
 
-### What is COM?
-- COM (Component Object Model) is a Windows technology
-- It allows programs to interact with each other
-- Outlook exposes its data through COM
-- No internet or cloud services required
+This PowerShell script:
+- Generates a custom calendar icon (`assets/icon.ico` + `assets/icon.png`) with today's date
+- Places a **"Calendar Widget"** shortcut on your Desktop pointing to the local Electron binary
 
-### PowerShell Bridge
-The app runs PowerShell scripts that:
-1. Create an Outlook.Application COM object
-2. Access the calendar folder
-3. Retrieve appointments for the specified date range
-4. Extract meeting details (title, time, location, Teams links)
-5. Return the data as JSON
+Double-click the shortcut any time to start the widget.
 
-See [src/services/outlookService.js](src/services/outlookService.js) for the implementation.
+> To have the widget **launch at login**, see [Auto-Start at Login](#auto-start-at-login) under Advanced Customization.
 
-## Configuration
+---
 
-### Widget Position and Size
+## 6. Feature Walkthrough
 
-Edit [src/main.js](src/main.js#L14):
+### Calendar Tab
+
+| Control | Action |
+|---|---|
+| `←` / `→` buttons | Navigate to the previous / next day |
+| `↻` (refresh) button | Re-fetch events from Outlook |
+| Click an event card | Open the notes panel for that meeting |
+| `↑` / `↓` arrow keys | Keyboard-navigate between event cards |
+| `Enter` | Open the focused event card |
+| `Escape` | Close notes panel / dismiss modals |
+
+**Event cards display:**
+- Meeting title and time range
+- Location (room or address)
+- Organizer name
+- Teams meeting button (if the meeting has a Teams link)
+- Countdown to the next upcoming meeting
+
+### Actions Tab
+
+The **Actions** tab is a personal quick-launch board — store URLs you open often (dashboards, tickets, wikis, etc.).
+
+| Control | Action |
+|---|---|
+| `+` button | Add a new action (title + URL) |
+| Click an action card | Open the URL in your default browser |
+| Expand / collapse | Toggle full details on an action card |
+| Delete button | Remove an action permanently |
+
+Actions are persisted locally between sessions in your Windows user-data folder.
+
+### Meeting Notes
+
+1. Click any event card to open the notes panel.
+2. Type your notes (plain text or Markdown).
+3. Notes **auto-save** as you type (with a short debounce delay) — no manual save needed.
+4. Click **Save** to force an immediate save.
+5. Notes are written as `.md` files to:
+   ```
+   C:\Users\<YourUsername>\AppData\Roaming\outlook-calendar-widget\meeting-notes\
+   ```
+   Each file is named after the meeting ID and contains the meeting metadata header plus your notes.
+
+### Teams Links
+
+When a meeting contains a Teams link (in the meeting body or `OnlineMeetingURL` property), a **Join Teams** button appears on the event card. Clicking it opens the link in your default browser.
+
+---
+
+## 7. Configuration
+
+### Window Size and Position
+
+Edit [src/main.js](src/main.js) (around line 11):
 
 ```javascript
-const windowWidth = 400;   // Change width
-const windowHeight = 600;  // Change height
+const windowWidth  = 400;  // pixel width of the widget
+const windowHeight = 600;  // pixel height of the widget
 
-// Position calculation
-x: width - windowWidth - 20,  // 20px from right edge
-y: 20,                         // 20px from top
-```
-
-### Auto-Start Behavior
-
-Edit [src/main.js](src/main.js#L44):
-
-```javascript
-app.setLoginItemSettings({
-  openAtLogin: true,   // Set to false to disable auto-start
-  path: app.getPath('exe')
-});
+// Positioned 20 px from the right and top edges of the primary display
+x: width - windowWidth - 20,
+y: 20,
 ```
 
 ### Notes Storage Location
 
-By default, notes are stored in:
-```
-C:\Users\<YourUsername>\AppData\Roaming\outlook-calendar-widget\meeting-notes\
-```
-
-To change this, edit [src/main.js](src/main.js#L69):
+Edit [src/main.js](src/main.js) (the `save-note` IPC handler):
 
 ```javascript
 const notesDir = path.join(app.getPath('userData'), 'meeting-notes');
-// Change to custom location:
-// const notesDir = 'C:\\My Notes\\meetings';
+// Override example:
+// const notesDir = 'D:\\My Notes\\meetings';
 ```
 
-## Building for Production
+### Accent / Theme Colors
 
-### Create Standalone Executable
+Edit [src/renderer/styles.css](src/renderer/styles.css):
+
+```css
+/* Header and window controls */
+header { background: rgba(88, 28, 220, 0.85); }
+
+/* Event card left border accent */
+.event-card { border-left: 4px solid #7c3aed; }
+```
+
+---
+
+## 8. Build a Production Installer
+
+To distribute the widget or use it without Node.js:
 
 ```bash
 npm run build:win
 ```
 
-This creates:
-- An installer in `dist/outlook-calendar-widget Setup x.x.x.exe`
-- No need for Node.js after installation
-- Auto-start will work properly
+Output: `dist/Calendar Widget Setup x.x.x.exe`
 
-### Install the Built App
+Run the installer — it:
+- Installs the app to `%LOCALAPPDATA%\Programs\outlook-calendar-widget\`
+- Adds a Start Menu shortcut
+- Does **not** require Node.js on the target machine
 
-1. Run the installer from the `dist` folder
-2. The app installs to `C:\Users\<You>\AppData\Local\Programs\outlook-calendar-widget\`
-3. A shortcut is added to your Start Menu
-4. Auto-start is configured
+---
 
-## Development
-
-### Run with Developer Tools
+## 9. Development Mode
 
 ```bash
 npm run dev
 ```
 
-This opens the widget with Chrome DevTools for debugging.
-
-### Project Structure
-
-```
-calendar-widget/
-├── src/
-│   ├── main.js                 # Electron main process
-│   │                          # - Creates window
-│   │                          # - Handles IPC communication
-│   │                          # - Manages notes storage
-│   │
-│   ├── preload.js             # Security bridge between main/renderer
-│   │
-│   ├── services/
-│   │   └── outlookService.js  # Outlook COM automation
-│   │                          # - PowerShell script execution
-│   │                          # - Calendar data retrieval
-│   │
-│   └── renderer/
-│       ├── index.html         # UI structure
-│       ├── styles.css         # Styling
-│       └── app.js             # Frontend logic
-│
-├── package.json               # Project configuration
-└── README.md                  # Documentation
-```
-
-## Troubleshooting
-
-### Issue: "Outlook not found"
-
-**Causes:**
-- Outlook is not installed
-- Outlook is not running
-- Windows is blocking COM access
-
-**Solutions:**
-1. Install Microsoft Outlook
-2. Open Outlook at least once to complete setup
-3. Keep Outlook running (can be minimized)
-4. Check Windows security settings aren't blocking PowerShell
-
-### Issue: "Error connecting to Outlook"
-
-**Causes:**
-- Outlook is frozen or updating
-- PowerShell execution policy
-- COM registration issues
-
-**Solutions:**
-1. Restart Outlook
-2. Check PowerShell execution policy:
-   ```powershell
-   Get-ExecutionPolicy
-   # Should be RemoteSigned or Unrestricted
-   ```
-3. Re-register Outlook COM (as admin):
-   ```cmd
-   cd "C:\Program Files\Microsoft Office\root\Office16"
-   outlook.exe /regserver
-   ```
-
-### Issue: No calendar events showing
-
-**Causes:**
-- No events on selected date
-- Calendar not synced
-- Wrong calendar being read (if multiple)
-
-**Solutions:**
-1. Check Outlook directly for events on that date
-2. Wait for Outlook to sync with email server
-3. Click refresh (↻) button in widget
-4. Navigate to a different day and back
-
-### Issue: Teams links not appearing
-
-**Causes:**
-- Meeting isn't a Teams meeting
-- Teams link is in a non-standard format
-- Outlook version doesn't support online meeting properties
-
-**Solutions:**
-- Teams links are extracted from meeting body and online meeting properties
-- Some older Outlook versions may not populate the `IsOnlineMeeting` property
-- The link should still appear if it's in the meeting body
-
-### Issue: Can't save notes
-
-**Causes:**
-- No write permission to user directory
-- Disk full
-- Antivirus blocking file creation
-
-**Solutions:**
-1. Check available disk space
-2. Verify write permissions to `%APPDATA%`
-3. Check antivirus logs for blocked operations
-4. Try running as administrator (once to create directory)
-
-### Issue: Widget not auto-starting
-
-**Causes:**
-- Using development mode (`npm start`)
-- Production build not installed
-- Auto-start disabled in Task Manager
-
-**Solutions:**
-1. Build production version: `npm run build:win`
-2. Install the built app
-3. Check Task Manager → Startup tab
-4. Enable "Calendar Widget" if disabled
-
-## Security Considerations
-
-### PowerShell Execution
-The app runs PowerShell with `-ExecutionPolicy Bypass` to ensure scripts work. This is safe because:
-- Scripts are embedded in the app code
-- No external scripts are loaded
-- Only COM commands are executed
-- No system modifications are made
-
-### Data Privacy
-- **All data stays local**: Nothing is sent to the cloud
-- **No telemetry**: No usage tracking or analytics
-- **No authentication**: No passwords or tokens stored
-- **Read-only calendar access**: The app only reads calendar data, never modifies it
-
-### Notes Security
-- Notes are stored as plain text Markdown files
-- Stored in your Windows user profile directory
-- Protected by Windows file permissions
-- Not encrypted by default (encrypt the folder if needed)
-
-## Advanced Customization
-
-### Change Update Interval
-
-The calendar refreshes when you click the refresh button. To add auto-refresh, edit [src/renderer/app.js](src/renderer/app.js):
-
-```javascript
-// Add after init() function
-setInterval(loadEvents, 5 * 60 * 1000); // Refresh every 5 minutes
-```
-
-### Add Multiple Calendar Support
-
-Currently reads the default calendar. To support multiple calendars, modify [src/services/outlookService.js](src/services/outlookService.js).
-
-### Custom Theming
-
-Edit [src/renderer/styles.css](src/renderer/styles.css):
-
-```css
-/* Change primary color */
-.window-controls,
-header {
-  background: #0078d4; /* Change this color */
-}
-
-/* Change accent color */
-.event-card {
-  border-left: 4px solid #0078d4; /* Change this color */
-}
-```
-
-## Performance
-
-### Memory Usage
-- Typical: 50-100 MB RAM
-- Outlook COM calls are released after each query
-- Garbage collection is forced after COM operations
-
-### CPU Usage
-- Idle: ~0% CPU
-- Fetching events: Brief spike, then back to idle
-- PowerShell overhead is minimal
-
-### Outlook Impact
-- Minimal impact on Outlook performance
-- COM access is read-only
-- No continuous polling (only when refreshing)
-
-## Support
-
-If you encounter issues:
-1. Check this guide's troubleshooting section
-2. Review the [README.md](README.md) for common questions
-3. Open the app with dev tools (`npm run dev`) to see console errors
-4. Check Windows Event Viewer for COM errors
-
-## Upgrading
-
-To update to a new version:
-
-```bash
-# Pull latest code
-git pull
-
-# Reinstall dependencies
-npm install
-
-# Rebuild
-npm run build:win
-```
-
-## Uninstalling
-
-### Development Version
-Just delete the project folder.
-
-### Production Version
-1. Open Windows Settings → Apps
-2. Find "Calendar Widget"
-3. Click Uninstall
-
-Notes will remain in:
-```
-C:\Users\<You>\AppData\Roaming\outlook-calendar-widget\
-```
-
-Delete this folder manually if you want to remove notes.
+Opens the widget with **Chrome DevTools** attached. All console logs, network requests, and JS errors are visible in the DevTools panel.
 
 ---
 
-Enjoy your Outlook calendar widget! 📅
+## 10. Project Structure
+
+```
+calendar-widget-desktop/
+├── assets/
+│   ├── icon.ico               # App icon (auto-generated by npm run shortcut)
+│   └── icon.png               # PNG version of the icon
+│
+├── scripts/
+│   └── create-shortcut.ps1    # Desktop shortcut + icon generator
+│
+├── src/
+│   ├── main.js                # Electron main process
+│   │                          #   • Creates the BrowserWindow
+│   │                          #   • Handles all IPC channels
+│   │                          #   • Reads/writes notes and actions to disk
+│   │
+│   ├── preload.js             # Context-isolated bridge (main ↔ renderer)
+│   │                          #   • Exposes a safe electronAPI to the UI
+│   │
+│   ├── services/
+│   │   └── outlookService.js  # Outlook COM automation via PowerShell
+│   │                          #   • checkOutlookAvailable()
+│   │                          #   • getCalendarEvents(startDate, endDate)
+│   │
+│   └── renderer/
+│       ├── index.html         # Widget HTML shell
+│       ├── styles.css         # Glassmorphic styles
+│       └── app.js             # All UI logic (tabs, notes, actions, keyboard nav)
+│
+├── package.json
+├── README.md
+└── SETUP_GUIDE.md             # ← You are here
+```
+
+### IPC Channels Reference
+
+| Channel | Direction | Purpose |
+|---|---|---|
+| `check-outlook` | renderer → main | Verify Outlook COM is accessible |
+| `get-events` | renderer → main | Fetch calendar events for a date range |
+| `save-note` | renderer → main | Write a meeting note to disk |
+| `get-note` | renderer → main | Read a saved meeting note |
+| `get-actions` | renderer → main | Load the actions list |
+| `save-actions` | renderer → main | Persist the actions list |
+| `add-action` | renderer → main | Append one action |
+| `delete-action` | renderer → main | Remove one action by ID |
+| `minimize-window` | renderer → main | Minimize the widget |
+| `close-window` | renderer → main | Quit the app |
+| `open-external` | renderer → main | Open a URL in the system browser |
+| `get-notes-directory` | renderer → main | Return the notes folder path |
+
+---
+
+## 11. Troubleshooting
+
+### "Outlook not found" / "Retry Connection"
+
+| Cause | Fix |
+|---|---|
+| Outlook is not installed | Install Microsoft Outlook |
+| Outlook is not running | Open Outlook (can be minimized) |
+| First-time Outlook setup not completed | Open Outlook and finish account setup |
+| Windows blocking PowerShell COM access | See PowerShell execution policy fix below |
+
+**Check / fix PowerShell execution policy:**
+```powershell
+# View current policy
+Get-ExecutionPolicy
+
+# If it's 'Restricted', change it (run PowerShell as Administrator):
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Re-register Outlook COM objects (run as Administrator):**
+```cmd
+cd "C:\Program Files\Microsoft Office\root\Office16"
+outlook.exe /regserver
+```
+
+---
+
+### No Calendar Events Showing
+
+1. Open Outlook and confirm events exist on the selected date.
+2. Wait for Outlook to finish syncing with your mail server.
+3. Click **↻ Refresh** in the widget.
+4. Navigate away to another day, then back.
+
+---
+
+### Teams Join Button Not Appearing
+
+- The meeting must be a Teams meeting (not a Skype or in-person meeting).
+- Some older Outlook versions don't populate `IsOnlineMeeting` — the button still appears if the Teams URL is present in the meeting body.
+
+---
+
+### Notes Not Saving
+
+| Cause | Fix |
+|---|---|
+| No write permission to `%APPDATA%` | Run the widget once as Administrator to create the folder |
+| Disk full | Free up space |
+| Antivirus blocking file creation | Add an exception for `%APPDATA%\outlook-calendar-widget\` |
+
+---
+
+### `npm install` Fails
+
+- Ensure Node.js ≥ v16 is installed (`node --version`).
+- On a corporate network, configure the proxy (see [Step 3](#3-install-dependencies)).
+- Delete `node_modules` and `package-lock.json`, then retry:
+  ```bash
+  Remove-Item -Recurse -Force node_modules
+  Remove-Item package-lock.json
+  npm install
+  ```
+
+---
+
+### Shortcut Not Created / Icon Missing
+
+Run the shortcut script with verbose output:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\create-shortcut.ps1
+```
+Errors will be printed to the console. The most common cause is a missing `System.Drawing` assembly — this is included in all modern Windows versions but may require .NET Framework to be enabled.
+
+---
+
+## 12. Security & Privacy
+
+### PowerShell Execution
+The app spawns PowerShell with `-ExecutionPolicy Bypass` **only** to run the inline COM script embedded in `outlookService.js`. No external scripts are downloaded or executed.
+
+### Data Privacy
+- **All data is local** — nothing leaves your machine.
+- **No telemetry** — zero usage tracking or analytics.
+- **No credentials** — no passwords, API keys, or tokens are stored.
+- **Read-only calendar access** — the app never creates, modifies, or deletes Outlook items.
+
+### Notes Security
+- Stored as plain-text Markdown under `%APPDATA%\outlook-calendar-widget\meeting-notes\`.
+- Protected by standard Windows NTFS user permissions.
+- Not encrypted by default — use Windows BitLocker or EFS if you need encryption at rest.
+
+### Electron Security
+- `nodeIntegration` is **disabled** in the renderer.
+- `contextIsolation` is **enabled**; the renderer can only call the explicitly whitelisted `electronAPI` methods defined in `preload.js`.
+
+---
+
+## 13. Advanced Customization
+
+### Auto-Start at Login
+
+The development build (`npm start`) does not register an auto-start entry. To launch the widget at Windows login:
+
+**Option A — Task Scheduler (recommended)**
+1. Open **Task Scheduler** → *Create Basic Task*.
+2. Trigger: **At log on**.
+3. Action: **Start a program** → browse to `node_modules\electron\dist\electron.exe`.
+4. Add argument: `.` (dot = current directory).
+5. Set *Start in* to your project folder.
+
+**Option B — Startup folder**
+1. Press `Win + R`, type `shell:startup`, press Enter.
+2. Copy the Desktop shortcut (created by `npm run shortcut`) into this folder.
+
+**Option C — Production installer**
+Build and install the app with `npm run build:win`. The installer registers an auto-start entry automatically.
+
+---
+
+### Add Auto-Refresh
+
+The widget refreshes only on demand (click ↻). To add a timed refresh, append this to `src/renderer/app.js` after the `init()` call:
+
+```javascript
+// Refresh calendar every 5 minutes
+setInterval(loadEvents, 5 * 60 * 1000);
+```
+
+---
+
+### Multiple Calendar Support
+
+`outlookService.js` currently reads `GetDefaultFolder(9)` (the primary Calendar folder). To read additional calendars, iterate over `namespace.Folders` and merge appointments from each calendar folder.
+
+---
+
+### Custom Theming
+
+```css
+/* src/renderer/styles.css */
+
+/* Background overlay */
+body { background: rgba(15, 10, 40, 0.6); }
+
+/* Card glassmorphism */
+.event-card {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  border-left: 4px solid #7c3aed; /* accent color */
+}
+
+/* Header */
+header { background: rgba(88, 28, 220, 0.85); }
+```
+
+---
+
+## 14. Upgrading & Uninstalling
+
+### Upgrade (development build)
+
+```bash
+git pull
+npm install
+```
+
+### Upgrade (production build)
+
+```bash
+git pull
+npm install
+npm run build:win
+# Run the new installer from dist/
+```
+
+### Uninstall
+
+**Development build:** Delete the project folder.
+
+**Production build:**
+1. Open *Windows Settings → Apps*.
+2. Search for **Calendar Widget** → Uninstall.
+
+In both cases, meeting notes and actions remain at:
+```
+C:\Users\<YourUsername>\AppData\Roaming\outlook-calendar-widget\
+```
+Delete this folder manually if you want to remove all saved data.
+
+---
+
+*Questions or issues? Open the widget in dev mode (`npm run dev`) to inspect the console, then check the [README.md](README.md) for additional context.*
