@@ -1,96 +1,157 @@
-const { PublicClientApplication } = require('@azure/msal-node');
-const { Client } = require('@microsoft/microsoft-graph-client');
-const { TokenCredentialAuthenticationProvider } = require('@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials');
+const { spawn } = require('child_process');
+const path = require('path');
 
-// You need to register an app in Azure AD and get these values
-const msalConfig = {
-  auth: {
-    clientId: 'YOUR_CLIENT_ID', // Replace with your Azure AD app client ID
-    authority: 'https://login.microsoftonline.com/common',
-  }
-};
+// PowerShell script to interact with Outlook COM
+function executePowerShell(script) {
+  return new Promise((resolve, reject) => {
+    const ps = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-Command', script
+    ]);
 
-const pca = new PublicClientApplication(msalConfig);
+    let stdout = '';
+    let stderr = '';
 
-const scopes = ['User.Read', 'Calendars.Read'];
-
-let cachedAccount = null;
-
-async function getAuthClient() {
-  try {
-    const authResult = await pca.acquireTokenInteractive({
-      scopes: scopes,
-      prompt: 'select_account'
+    ps.stdout.on('data', (data) => {
+      stdout += data.toString();
     });
 
-    cachedAccount = authResult.account;
-    return authResult.account;
-  } catch (error) {
-    console.error('Authentication error:', error);
-    throw error;
-  }
+    ps.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    ps.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `PowerShell exited with code ${code}`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
 }
 
-async function getAccessToken() {
-  if (!cachedAccount) {
-    const accounts = await pca.getTokenCache().getAllAccounts();
-    if (accounts.length === 0) {
-      throw new Error('No cached account found. Please login again.');
+async function checkOutlookAvailable() {
+  const script = `
+    try {
+      $outlook = New-Object -ComObject Outlook.Application
+      $namespace = $outlook.GetNamespace("MAPI")
+      $folder = $namespace.GetDefaultFolder(9) # 9 = Calendar folder
+      Write-Output "available"
+      [System.Runtime.Interopservices.Marshal]::ReleaseComObject($outlook) | Out-Null
+      [System.GC]::Collect()
+      [System.GC]::WaitForPendingFinalizers()
+    } catch {
+      Write-Error $_.Exception.Message
+      exit 1
     }
-    cachedAccount = accounts[0];
-  }
+  `;
 
   try {
-    const response = await pca.acquireTokenSilent({
-      scopes: scopes,
-      account: cachedAccount
-    });
-    return response.accessToken;
+    await executePowerShell(script);
+    return true;
   } catch (error) {
-    console.error('Token acquisition error:', error);
-    const response = await pca.acquireTokenInteractive({
-      scopes: scopes,
-      account: cachedAccount
-    });
-    return response.accessToken;
+    console.error('Outlook check failed:', error);
+    return false;
   }
 }
 
 async function getCalendarEvents(startDate, endDate) {
-  try {
-    const accessToken = await getAccessToken();
+  const startDateStr = startDate.toISOString();
+  const endDateStr = endDate.toISOString();
 
-    const client = Client.init({
-      authProvider: (done) => {
-        done(null, accessToken);
+  const script = `
+    try {
+      $outlook = New-Object -ComObject Outlook.Application
+      $namespace = $outlook.GetNamespace("MAPI")
+      $calendar = $namespace.GetDefaultFolder(9)
+
+      $startDate = [DateTime]::Parse("${startDateStr}")
+      $endDate = [DateTime]::Parse("${endDateStr}")
+
+      $appointments = $calendar.Items
+      $appointments.Sort("[Start]")
+      $appointments.IncludeRecurrences = $true
+
+      $filter = "[Start] >= '$($startDate.ToString("g"))' AND [Start] <= '$($endDate.ToString("g"))'"
+      $items = $appointments.Restrict($filter)
+
+      $events = @()
+
+      foreach ($item in $items) {
+        $teamsLink = $null
+        $location = $item.Location
+
+        # Try to extract Teams link from body
+        if ($item.Body -match 'https://teams\\.microsoft\\.com/l/meetup-join/[^\\s<>"]+') {
+          $teamsLink = $matches[0]
+        }
+
+        # Check if it's a Teams meeting
+        if ($item.IsOnlineMeeting) {
+          # Try to get online meeting URL
+          try {
+            if ($item.OnlineMeetingConfLink) {
+              $teamsLink = $item.OnlineMeetingConfLink
+            }
+          } catch {}
+        }
+
+        $organizer = "Unknown"
+        try {
+          if ($item.Organizer) {
+            $organizer = $item.Organizer
+          }
+        } catch {}
+
+        $eventObj = @{
+          id = $item.EntryID
+          subject = $item.Subject
+          start = $item.Start.ToString("o")
+          end = $item.End.ToString("o")
+          location = $location
+          teamsLink = $teamsLink
+          organizer = $organizer
+          body = $item.Body
+          isAllDay = $item.AllDayEvent
+        }
+
+        $events += $eventObj
       }
-    });
 
-    const startDateTime = startDate.toISOString();
-    const endDateTime = endDate.toISOString();
+      # Convert to JSON
+      $json = $events | ConvertTo-Json -Depth 3 -Compress
+      Write-Output $json
 
-    const events = await client
-      .api('/me/calendarview')
-      .query({
-        startDateTime: startDateTime,
-        endDateTime: endDateTime,
-        $orderby: 'start/dateTime'
-      })
-      .select('subject,start,end,location,onlineMeeting,organizer,body,isAllDay')
-      .top(50)
-      .get();
+      [System.Runtime.Interopservices.Marshal]::ReleaseComObject($outlook) | Out-Null
+      [System.GC]::Collect()
+      [System.GC]::WaitForPendingFinalizers()
 
-    return events.value.map(event => ({
-      id: event.id,
-      subject: event.subject,
-      start: event.start.dateTime,
-      end: event.end.dateTime,
-      location: event.location?.displayName || '',
-      teamsLink: event.onlineMeeting?.joinUrl || null,
-      organizer: event.organizer?.emailAddress?.name || 'Unknown',
-      body: event.body?.content || '',
-      isAllDay: event.isAllDay || false
-    }));
+    } catch {
+      Write-Error $_.Exception.Message
+      exit 1
+    }
+  `;
+
+  try {
+    const result = await executePowerShell(script);
+
+    // Parse the JSON output
+    const lines = result.trim().split('\n');
+    const jsonLine = lines[lines.length - 1];
+
+    if (!jsonLine || jsonLine.trim() === '') {
+      return [];
+    }
+
+    let events = JSON.parse(jsonLine);
+
+    // Handle case where single event is returned as object instead of array
+    if (!Array.isArray(events)) {
+      events = [events];
+    }
+
+    return events;
   } catch (error) {
     console.error('Error fetching calendar events:', error);
     throw error;
@@ -98,6 +159,6 @@ async function getCalendarEvents(startDate, endDate) {
 }
 
 module.exports = {
-  getAuthClient,
+  checkOutlookAvailable,
   getCalendarEvents
 };

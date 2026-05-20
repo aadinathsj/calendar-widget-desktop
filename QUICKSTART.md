@@ -1,76 +1,119 @@
 # Quick Start Guide
 
-## ⚡ Get Started in 5 Minutes
+## ⚡ Get Started in 2 Minutes
 
-### 1. Register Azure AD App (One-time setup)
+**No cloud setup required!** Works directly with your local Outlook.
 
-**You MUST do this first** - the app needs permission to access your Outlook calendar.
+### Prerequisites
 
-1. Go to https://portal.azure.com
-2. Search for "App registrations" → Click "New registration"
-3. Fill in:
-   - **Name**: `Calendar Widget`
-   - **Account types**: Select "Accounts in any organizational directory and personal Microsoft accounts"
-   - **Redirect URI**: Select "Public client/native" and enter `http://localhost`
-4. Click "Register"
-5. **COPY** the "Application (client) ID" (you'll need this next!)
-6. Click "Authentication" → Enable "Allow public client flows" → Save
+✅ Windows 10 or 11  
+✅ Microsoft Outlook installed  
+✅ Node.js installed  
 
-### 2. Add Calendar Permissions
-
-1. Still in Azure Portal, click "API permissions"
-2. Click "+ Add a permission"
-3. Select "Microsoft Graph" → "Delegated permissions"
-4. Search and add: `Calendars.Read`
-5. Click "Add permissions"
-
-### 3. Configure the App
-
-Open [src/services/outlookService.js](src/services/outlookService.js#L10) and replace:
-
-```javascript
-clientId: 'YOUR_CLIENT_ID'  // Replace with your Application ID from step 1
-```
-
-### 4. Run the App
+### Installation
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Run the app
 npm start
 ```
 
-### 5. Sign In
+That's it! The widget will open in the top-right corner.
 
-- Click "Sign in with Microsoft"
-- Grant permissions
-- Your calendar will load!
+## First Run
 
-## Features
+When you first launch the app:
 
-✅ **View meetings** - See all your Outlook events for the day  
-✅ **Navigate days** - Use ← → arrows to see upcoming meetings  
-✅ **Teams links** - Quick access to join meetings  
-✅ **Take notes** - Click any meeting to add notes (saved as .md files)  
-✅ **Auto-start** - Opens automatically when you log in to Windows  
-✅ **Always visible** - Stays on top in the corner of your screen  
+1. **Automatic Connection**: The widget checks for Outlook on your system
+2. **If Outlook Found**: Your calendar loads immediately
+3. **If Not Found**: You'll see a message to open Outlook first
 
-## Where are my notes?
+### Make sure Outlook is running
+- Open Microsoft Outlook (it can be minimized to the system tray)
+- The widget needs Outlook to be running to access your calendar
+- Click "Retry Connection" in the widget if needed
 
+## Features At a Glance
+
+### View Your Calendar
+- Today's meetings appear automatically
+- See time, location, organizer, and Teams links
+- Clean, simple interface
+
+### Navigate Days
+- Click **←** to see yesterday's meetings
+- Click **→** to see tomorrow's meetings
+- Current date is displayed at the top
+
+### Take Meeting Notes
+1. Click any meeting card
+2. A notes editor opens
+3. Type your notes
+4. Click "Save Notes"
+5. Notes are saved as Markdown files with meeting metadata
+
+### Where Are My Notes?
 ```
 C:\Users\FS150419\AppData\Roaming\outlook-calendar-widget\meeting-notes\
 ```
 
-Each note includes meeting metadata + your custom notes in Markdown format.
+Each note includes:
+- Meeting details (title, time, location)
+- Teams link (if available)
+- Your custom notes in Markdown format
+
+## Auto-Start
+
+The widget is configured to start automatically when you log in to Windows. You can find it in:
+- Task Manager → Startup tab → "Calendar Widget"
+
+## Building Standalone App
+
+Want to share it or run without Node.js?
+
+```bash
+npm run build:win
+```
+
+This creates an installer in the `dist` folder. Install it and you're done!
 
 ## Troubleshooting
 
-**"Authentication failed"**
-- Double-check your client ID in `outlookService.js`
-- Verify you enabled "public client flows" in Azure
-- Make sure you added Calendars.Read permission
+### "Outlook not found"
+**Solution**: Open Microsoft Outlook, then click "Retry Connection"
 
-**"No events showing"**
-- Click the refresh (↻) button
-- Check internet connection
-- Verify calendar permissions in Azure
+### "Error connecting to Outlook"  
+**Solution**: 
+1. Restart Outlook
+2. Make sure Outlook isn't frozen or updating
+3. Try restarting the widget
 
-**Need help?** See [SETUP_GUIDE.md](SETUP_GUIDE.md) for detailed instructions.
+### No events showing
+**Solution**:
+1. Check you have events in Outlook for that day
+2. Click the refresh (↻) button
+3. Navigate to a different day and back
+
+### Widget won't auto-start
+**Solution**: If running with `npm start`, auto-start won't work. Build the production version with `npm run build:win` and install it.
+
+## Key Differences from Cloud Approach
+
+| Feature | This App | Cloud/Azure Approach |
+|---------|----------|---------------------|
+| Setup | Just run it | Register Azure app |
+| Authentication | None needed | OAuth login required |
+| Data | Local only | Cloud API calls |
+| Privacy | 100% local | Data goes to Microsoft |
+| Offline | Works offline | Needs internet |
+| Complexity | Simple | Complex |
+
+## Next Steps
+
+- Customize the widget position and size (see [src/main.js](src/main.js#L14))
+- Change auto-start behavior (see [src/main.js](src/main.js#L44))
+- Modify the UI styling (see [src/renderer/styles.css](src/renderer/styles.css))
+
+Enjoy your calendar widget! 📅

@@ -5,15 +5,7 @@ let currentMeetingData = null;
 // Initialize the app
 async function init() {
   setupEventListeners();
-
-  const isAuthenticated = await window.electronAPI.getAuthStatus();
-
-  if (isAuthenticated) {
-    showMainScreen();
-    await loadEvents();
-  } else {
-    showLoginScreen();
-  }
+  await checkOutlookConnection();
 }
 
 function setupEventListeners() {
@@ -26,8 +18,8 @@ function setupEventListeners() {
     window.electronAPI.closeWindow();
   });
 
-  // Login
-  document.getElementById('login-btn').addEventListener('click', handleLogin);
+  // Retry connection
+  document.getElementById('retry-btn').addEventListener('click', checkOutlookConnection);
 
   // Date navigation
   document.getElementById('prev-day').addEventListener('click', () => {
@@ -57,26 +49,26 @@ function showMainScreen() {
   document.getElementById('main-screen').classList.remove('hidden');
 }
 
-async function handleLogin() {
-  const loginBtn = document.getElementById('login-btn');
-  loginBtn.textContent = 'Signing in...';
-  loginBtn.disabled = true;
+async function checkOutlookConnection() {
+  const statusMessage = document.getElementById('status-message');
+  const retryBtn = document.getElementById('retry-btn');
+
+  statusMessage.textContent = 'Connecting to Outlook...';
+  retryBtn.classList.add('hidden');
 
   try {
-    const result = await window.electronAPI.login();
+    const result = await window.electronAPI.checkOutlook();
 
-    if (result.success) {
+    if (result.success && result.available) {
       showMainScreen();
       await loadEvents();
     } else {
-      alert('Login failed: ' + result.error);
-      loginBtn.textContent = 'Sign in with Microsoft';
-      loginBtn.disabled = false;
+      statusMessage.textContent = 'Outlook not found. Please make sure Microsoft Outlook is installed and running.';
+      retryBtn.classList.remove('hidden');
     }
   } catch (error) {
-    alert('Login error: ' + error.message);
-    loginBtn.textContent = 'Sign in with Microsoft';
-    loginBtn.disabled = false;
+    statusMessage.textContent = 'Error connecting to Outlook: ' + error.message;
+    retryBtn.classList.remove('hidden');
   }
 }
 

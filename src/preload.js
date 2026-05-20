@@ -1,8 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  getAuthStatus: () => ipcRenderer.invoke('get-auth-status'),
-  login: () => ipcRenderer.invoke('login'),
+  checkOutlook: () => ipcRenderer.invoke('check-outlook'),
   getEvents: (startDate, endDate) => ipcRenderer.invoke('get-events', startDate, endDate),
   saveNote: (meetingId, noteContent, meetingData) =>
     ipcRenderer.invoke('save-note', meetingId, noteContent, meetingData),

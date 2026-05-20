@@ -1,10 +1,10 @@
 # Outlook Calendar Widget
 
-A desktop widget that displays your Outlook calendar events and allows you to take notes for each meeting.
+A simple desktop widget that displays your Outlook calendar events and allows you to take notes for each meeting. **No cloud setup or registration required** - works directly with your local Outlook installation.
 
 ## Features
 
-- 📅 View your Outlook calendar events
+- 📅 View your Outlook calendar events directly from your local Outlook
 - 🕐 See meeting times, locations, and organizers
 - 🎥 Quick access to Teams meeting links
 - 📝 Take and save notes for each meeting (stored as Markdown files)
@@ -12,45 +12,36 @@ A desktop widget that displays your Outlook calendar events and allows you to ta
 - 🚀 Auto-starts when you power on your computer
 - 📍 Sits in the corner of your desktop
 
-## Setup
+## Requirements
 
-### Prerequisites
+- Windows 10/11
+- Microsoft Outlook installed and configured
+- Node.js (v16 or later)
 
-1. Node.js (v16 or later)
-2. An Azure AD application registration
+## Quick Setup
 
-### Azure AD App Registration
-
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Navigate to "Azure Active Directory" → "App registrations" → "New registration"
-3. Name: "Calendar Widget" (or your choice)
-4. Supported account types: "Accounts in any organizational directory and personal Microsoft accounts"
-5. Redirect URI: Select "Public client/native (mobile & desktop)" and enter: `http://localhost`
-6. Click "Register"
-7. Copy the "Application (client) ID" from the Overview page
-8. Go to "Authentication" → "Advanced settings" → Enable "Allow public client flows" → Save
-9. Update `src/services/outlookService.js` and replace `YOUR_CLIENT_ID` with your Application ID
-
-### Installation
+**No Azure registration needed!** The app works directly with your installed Outlook.
 
 ```bash
 # Install dependencies
 npm install
 
-# Run in development mode
-npm run dev
-
-# Build for production
-npm run build:win
+# Run the app
+npm start
 ```
+
+That's it! The widget will:
+1. Check for Outlook on your system
+2. Connect to your local Outlook calendar
+3. Display your meetings
 
 ## Usage
 
-1. **First Launch**: Sign in with your Microsoft account when prompted
-2. **View Calendar**: The widget will display today's meetings
-3. **Navigate Days**: Use the arrow buttons to view meetings for other days
-4. **Take Notes**: Click on any meeting to open the notes editor
-5. **Save Notes**: Notes are automatically saved as Markdown files in your user data directory
+1. **View Calendar**: The widget displays today's meetings automatically
+2. **Navigate Days**: Use the ← → arrow buttons to view meetings for other days
+3. **Refresh**: Click the ↻ button to refresh your calendar
+4. **Take Notes**: Click on any meeting card to open the notes editor
+5. **Save Notes**: Notes are automatically saved as Markdown files
 
 ## Notes Storage
 
@@ -65,32 +56,76 @@ Each note file includes:
 - Organizer information
 - Your custom notes
 
+## How It Works
+
+The widget uses Windows COM automation to interact with your local Outlook installation through PowerShell. This means:
+- ✅ No cloud authentication needed
+- ✅ No app registration required
+- ✅ No API tokens or credentials
+- ✅ Works offline (if Outlook is running)
+- ✅ Automatically stays in sync with your Outlook calendar
+
 ## Auto-Start
 
-The widget is configured to automatically start when you log in to Windows. You can disable this in the Windows Task Manager under the "Startup" tab.
+The widget is configured to automatically start when you log in to Windows. To disable:
+1. Press `Ctrl+Shift+Esc` to open Task Manager
+2. Go to the "Startup" tab
+3. Find "Calendar Widget"
+4. Right-click and select "Disable"
+
+## Building for Production
+
+To create a standalone executable:
+
+```bash
+npm run build:win
+```
+
+The installer will be in the `dist` folder. Install it and the widget will run without needing Node.js.
+
+## Troubleshooting
+
+### "Outlook not found"
+- Ensure Microsoft Outlook is installed on your computer
+- Open Outlook at least once to complete initial setup
+- Make sure Outlook is running (it can be minimized)
+
+### "Error connecting to Outlook"
+- Check if Outlook is responding (not frozen or updating)
+- Try restarting Outlook
+- Click the "Retry Connection" button in the widget
+
+### Calendar events not loading
+- Verify you have events in your Outlook calendar for the selected date
+- Click the refresh (↻) button
+- Check if Outlook is syncing with your email server
+
+### Widget not starting on boot
+- Check Windows Task Manager → Startup tab
+- Ensure "Calendar Widget" is enabled
+- If using the development version (`npm start`), auto-start won't work - build the production version first
 
 ## Development
 
 ```bash
-# Run with dev tools open
+# Run with developer tools
 npm run dev
 ```
 
-## Troubleshooting
+## Technical Details
 
-### Authentication Issues
-- Ensure your Azure AD app is properly configured
-- Check that the client ID in `outlookService.js` is correct
-- Try signing out and signing in again
+- **Framework**: Electron (desktop app)
+- **Outlook Integration**: Windows COM API via PowerShell
+- **Storage**: Local filesystem (Markdown files)
+- **UI**: Vanilla JavaScript, CSS
 
-### Calendar Not Loading
-- Verify you have an active internet connection
-- Check that you've granted calendar permissions to the app
-- Try clicking the refresh button
+## Privacy
 
-### Auto-Start Not Working
-- Check Windows Task Manager → Startup tab
-- Ensure the app has permission to run at startup
+All data stays on your local machine:
+- Calendar data is read directly from your local Outlook
+- Notes are stored in your user directory
+- No data is sent to any cloud service
+- No authentication or tracking
 
 ## License
 

@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const Store = require('electron-store');
-const { getAuthClient, getCalendarEvents } = require('./services/outlookService');
+const { getCalendarEvents, checkOutlookAvailable } = require('./services/outlookService');
 
 const store = new Store();
 
@@ -57,16 +57,10 @@ app.setLoginItemSettings({
 });
 
 // IPC Handlers
-ipcMain.handle('get-auth-status', async () => {
-  const account = store.get('account');
-  return !!account;
-});
-
-ipcMain.handle('login', async () => {
+ipcMain.handle('check-outlook', async () => {
   try {
-    const account = await getAuthClient();
-    store.set('account', account);
-    return { success: true };
+    const available = await checkOutlookAvailable();
+    return { success: true, available };
   } catch (error) {
     return { success: false, error: error.message };
   }
