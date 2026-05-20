@@ -11,6 +11,9 @@ function createWindow() {
   const windowWidth = 400;
   const windowHeight = 600;
 
+  const iconPath = path.join(__dirname, '..', 'assets', 'icon.ico');
+  const iconExists = require('fs').existsSync(iconPath);
+
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
@@ -22,6 +25,7 @@ function createWindow() {
     alwaysOnTop: true,
     skipTaskbar: false,
     resizable: false,
+    icon: iconExists ? iconPath : undefined,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
