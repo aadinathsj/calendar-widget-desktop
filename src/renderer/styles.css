@@ -75,7 +75,7 @@ body {
   flex-direction: column;
 }
 
-/* Window Controls */
+/* Window Controls - Draggable Header */
 .window-controls {
   display: flex;
   justify-content: flex-end;
@@ -86,6 +86,9 @@ body {
     rgba(100, 150, 255, 0.1));
   -webkit-app-region: drag;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: move;
+  user-select: none;
+  min-height: 44px;
 }
 
 .control-btn {
@@ -200,7 +203,9 @@ body {
 .tab-content {
   height: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-5);
+  scroll-behavior: smooth;
 }
 
 /* Calendar View */
@@ -253,10 +258,18 @@ body {
   transition: all var(--transition-fast);
   font-weight: 600;
   margin-bottom: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .refresh-btn:hover {
   background: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1px);
+}
+
+.refresh-btn:active {
+  transform: translateY(0);
 }
 
 #events-list,
@@ -264,6 +277,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding-bottom: var(--space-2);
 }
 
 /* Event Cards - Glassmorphic */
@@ -636,6 +650,10 @@ body {
   outline: none;
   background: transparent;
   color: var(--text-primary);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  min-height: 200px;
 }
 
 #notes-editor::placeholder {
@@ -681,22 +699,31 @@ body {
   font-weight: 500;
 }
 
-/* Scrollbar */
+/* Scrollbar - Enhanced */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(130, 87, 229, 0.05);
+  border-radius: 4px;
+  margin: 4px 0;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(130, 87, 229, 0.3);
-  border-radius: 3px;
+  background: rgba(130, 87, 229, 0.4);
+  border-radius: 4px;
+  transition: background var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(130, 87, 229, 0.5);
+  background: rgba(130, 87, 229, 0.6);
+}
+
+/* Smooth scrolling for all scrollable areas */
+.tab-content,
+#notes-editor {
+  scroll-behavior: smooth;
 }
 
 /* Focus states */
@@ -705,3 +732,32 @@ a:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
+
+/* Fade in animation for cards */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.event-card,
+.action-card {
+  animation: fadeInUp 300ms ease-out backwards;
+}
+
+.event-card:nth-child(1) { animation-delay: 0ms; }
+.event-card:nth-child(2) { animation-delay: 50ms; }
+.event-card:nth-child(3) { animation-delay: 100ms; }
+.event-card:nth-child(4) { animation-delay: 150ms; }
+.event-card:nth-child(5) { animation-delay: 200ms; }
+
+.action-card:nth-child(1) { animation-delay: 0ms; }
+.action-card:nth-child(2) { animation-delay: 50ms; }
+.action-card:nth-child(3) { animation-delay: 100ms; }
+.action-card:nth-child(4) { animation-delay: 150ms; }
+.action-card:nth-child(5) { animation-delay: 200ms; }
