@@ -437,7 +437,7 @@ body {
   overflow: hidden;
 }
 
-/* Accent bar for meeting status */
+/* Accent bar — color reflects the Outlook account the event belongs to */
 .event-card::before {
   content: '';
   position: absolute;
@@ -445,8 +445,13 @@ body {
   top: 0;
   bottom: 0;
   width: 3px;
-  background: var(--accent-blue);
-  transition: background var(--transition-smooth);
+  background: var(--account-color, var(--accent-blue));
+  transition: background var(--transition-smooth), opacity var(--transition-smooth);
+}
+
+/* Dim the blade for past meetings so done events recede visually */
+.event-card[data-state="past"]::before {
+  opacity: 0.35;
 }
 
 /* Specular highlight overlay on hover */

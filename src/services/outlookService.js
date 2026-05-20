@@ -64,71 +64,77 @@ async function getCalendarEvents(startDate, endDate) {
     try {
       $outlook = New-Object -ComObject Outlook.Application
       $namespace = $outlook.GetNamespace("MAPI")
-      $calendar = $namespace.GetDefaultFolder(9)
 
       $startDate = [DateTime]::Parse("${startDateStr}")
       $endDate = [DateTime]::Parse("${endDateStr}")
 
-      $appointments = $calendar.Items
-      $appointments.Sort("[Start]")
-      $appointments.IncludeRecurrences = $true
+      $accountColors = @('#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4')
+      $allEvents = [System.Collections.Generic.List[object]]::new()
+      $accountIndex = 0
 
-      $filter = "[Start] >= '$($startDate.ToString("g"))' AND [Start] <= '$($endDate.ToString("g"))'"
-      $items = $appointments.Restrict($filter)
-
-      $events = @()
-
-      foreach ($item in $items) {
-        $teamsLink = $null
-        $location = $item.Location
-
-        # Extract Teams join link - supports both URL formats:
-        #   Old: https://teams.microsoft.com/l/meetup-join/...
-        #   New: https://teams.microsoft.com/meet/...
-        if ($item.Body -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^\\s<>"]+') {
-          $teamsLink = $matches[0]
-        }
-
-        # Fallback: check HTMLBody - some received invites only have the link in HTML
-        if (-not $teamsLink -and $item.HTMLBody) {
-          if ($item.HTMLBody -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^"\\s]+') {
-            $teamsLink = $matches[0]
-          }
-        }
-
-        # Fallback: OnlineMeetingConfLink (only populated for meetings you organised)
-        if (-not $teamsLink -and $item.IsOnlineMeeting) {
-          try {
-            if ($item.OnlineMeetingConfLink) {
-              $teamsLink = $item.OnlineMeetingConfLink
-            }
-          } catch {}
-        }
-
-        $organizer = "Unknown"
+      foreach ($store in $namespace.Stores) {
         try {
-          if ($item.Organizer) {
-            $organizer = $item.Organizer
+          $calFolder = $store.GetDefaultFolder(9)
+          $accountName = $store.DisplayName
+          $accountColor = $accountColors[$accountIndex % $accountColors.Count]
+
+          $appointments = $calFolder.Items
+          $appointments.Sort("[Start]")
+          $appointments.IncludeRecurrences = $true
+
+          $filter = "[Start] >= '$($startDate.ToString("g"))' AND [Start] <= '$($endDate.ToString("g"))'"
+          $items = $appointments.Restrict($filter)
+
+          foreach ($item in $items) {
+            $teamsLink = $null
+            $location = $item.Location
+
+            if ($item.Body -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^\\s<>"]+') {
+              $teamsLink = $matches[0]
+            }
+            if (-not $teamsLink -and $item.HTMLBody) {
+              if ($item.HTMLBody -match 'https://teams\\.microsoft\\.com/(?:l/meetup-join|meet)/[^"\\s]+') {
+                $teamsLink = $matches[0]
+              }
+            }
+            if (-not $teamsLink -and $item.IsOnlineMeeting) {
+              try {
+                if ($item.OnlineMeetingConfLink) { $teamsLink = $item.OnlineMeetingConfLink }
+              } catch {}
+            }
+
+            $organizer = "Unknown"
+            try { if ($item.Organizer) { $organizer = $item.Organizer } } catch {}
+
+            $eventObj = [PSCustomObject]@{
+              id           = $item.EntryID
+              subject      = $item.Subject
+              start        = $item.Start.ToString("o")
+              end          = $item.End.ToString("o")
+              location     = $location
+              teamsLink    = $teamsLink
+              organizer    = $organizer
+              body         = $item.Body
+              isAllDay     = $item.AllDayEvent
+              accountName  = $accountName
+              accountIndex = $accountIndex
+              accountColor = $accountColor
+            }
+            $allEvents.Add($eventObj)
           }
-        } catch {}
-
-        $eventObj = @{
-          id = $item.EntryID
-          subject = $item.Subject
-          start = $item.Start.ToString("o")
-          end = $item.End.ToString("o")
-          location = $location
-          teamsLink = $teamsLink
-          organizer = $organizer
-          body = $item.Body
-          isAllDay = $item.AllDayEvent
+        } catch {
+          # Store has no accessible calendar folder, skip it
         }
-
-        $events += $eventObj
+        $accountIndex++
       }
 
-      # Convert to JSON
-      $json = $events | ConvertTo-Json -Depth 3 -Compress
+      # Sort by start time; deduplicate by EntryID (shared calendars can duplicate)
+      $seen = [System.Collections.Generic.HashSet[string]]::new()
+      $sorted = $allEvents |
+        Sort-Object { [DateTime]::Parse($_.start) } |
+        Where-Object { $seen.Add($_.id) }
+
+      $json = $sorted | ConvertTo-Json -Depth 3 -Compress
       Write-Output $json
 
       [System.Runtime.Interopservices.Marshal]::ReleaseComObject($outlook) | Out-Null

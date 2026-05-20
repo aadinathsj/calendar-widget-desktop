@@ -474,9 +474,15 @@ function createEventCard(event) {
   const card = document.createElement('div');
   card.className = 'event-card';
 
-  // Add meeting state attribute
   const state = getMeetingState(event);
   card.setAttribute('data-state', state);
+
+  if (event.accountColor) {
+    card.style.setProperty('--account-color', event.accountColor);
+  }
+  if (event.accountName) {
+    card.setAttribute('data-account', event.accountName);
+  }
 
   const startTime = new Date(event.start).toLocaleTimeString('en-US', {
     hour: 'numeric',
