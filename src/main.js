@@ -50,10 +50,12 @@ app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Auto-start configuration
+// Auto-start configuration - runs even if Outlook isn't open yet
 app.setLoginItemSettings({
   openAtLogin: true,
-  path: app.getPath('exe')
+  openAsHidden: false,
+  path: app.getPath('exe'),
+  args: []
 });
 
 // IPC Handlers

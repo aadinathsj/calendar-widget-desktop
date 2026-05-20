@@ -63,12 +63,26 @@ async function checkOutlookConnection() {
       showMainScreen();
       await loadEvents();
     } else {
-      statusMessage.textContent = 'Outlook not found. Please make sure Microsoft Outlook is installed and running.';
+      statusMessage.innerHTML = 'Outlook not detected<br><span class="status-hint">Open Outlook and click Retry</span>';
       retryBtn.classList.remove('hidden');
+
+      // Auto-retry every 10 seconds in the background
+      setTimeout(async () => {
+        if (!retryBtn.classList.contains('hidden')) {
+          await checkOutlookConnection();
+        }
+      }, 10000);
     }
   } catch (error) {
-    statusMessage.textContent = 'Error connecting to Outlook: ' + error.message;
+    statusMessage.innerHTML = `Connection error<br><span class="status-hint">${error.message}</span>`;
     retryBtn.classList.remove('hidden');
+
+    // Auto-retry on error too
+    setTimeout(async () => {
+      if (!retryBtn.classList.contains('hidden')) {
+        await checkOutlookConnection();
+      }
+    }, 10000);
   }
 }
 
