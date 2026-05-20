@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const { getCalendarEvents, checkOutlookAvailable } = require('./services/outlookService');
 
 let mainWindow;
-let store;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -18,10 +17,11 @@ function createWindow() {
     x: width - windowWidth - 20,
     y: 20,
     frame: false,
-    transparent: false,
+    transparent: true,
+    backgroundColor: '#00000000',
     alwaysOnTop: true,
     skipTaskbar: false,
-    resizable: true,
+    resizable: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -37,10 +37,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Initialize store after app is ready
-  const Store = require('electron-store');
-  store = new Store();
-
   createWindow();
 
   app.on('activate', function () {
@@ -52,13 +48,8 @@ app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Auto-start configuration - runs even if Outlook isn't open yet
-app.setLoginItemSettings({
-  openAtLogin: true,
-  openAsHidden: false,
-  path: app.getPath('exe'),
-  args: []
-});
+// No autostart - create desktop shortcut manually
+// To create: npm run build, then right-click the exe → Send to → Desktop
 
 // IPC Handlers
 ipcMain.handle('check-outlook', async () => {
@@ -137,4 +128,73 @@ ipcMain.handle('close-window', () => {
 
 ipcMain.handle('get-notes-directory', () => {
   return path.join(app.getPath('userData'), 'meeting-notes');
+});
+
+// Actions CRUD handlers
+ipcMain.handle('get-actions', async () => {
+  try {
+    const actionsFile = path.join(app.getPath('userData'), 'actions.json');
+    try {
+      const data = await fs.readFile(actionsFile, 'utf-8');
+      return { success: true, actions: JSON.parse(data) };
+    } catch (err) {
+      // File doesn't exist yet, return empty array
+      return { success: true, actions: [] };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-actions', async (event, actions) => {
+  try {
+    const actionsFile = path.join(app.getPath('userData'), 'actions.json');
+    await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('add-action', async (event, action) => {
+  try {
+    const actionsFile = path.join(app.getPath('userData'), 'actions.json');
+    let actions = [];
+
+    try {
+      const data = await fs.readFile(actionsFile, 'utf-8');
+      actions = JSON.parse(data);
+    } catch (err) {
+      // File doesn't exist, start with empty array
+    }
+
+    // Add new action with timestamp ID
+    const newAction = {
+      id: Date.now().toString(),
+      ...action,
+      createdAt: new Date().toISOString()
+    };
+
+    actions.push(newAction);
+    await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
+
+    return { success: true, action: newAction };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-action', async (event, actionId) => {
+  try {
+    const actionsFile = path.join(app.getPath('userData'), 'actions.json');
+    const data = await fs.readFile(actionsFile, 'utf-8');
+    let actions = JSON.parse(data);
+
+    actions = actions.filter(a => a.id !== actionId);
+    await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });

@@ -8,5 +8,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getNote: (meetingId) => ipcRenderer.invoke('get-note', meetingId),
   minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   closeWindow: () => ipcRenderer.invoke('close-window'),
-  getNotesDirectory: () => ipcRenderer.invoke('get-notes-directory')
+  getNotesDirectory: () => ipcRenderer.invoke('get-notes-directory'),
+
+  // Actions API
+  getActions: () => ipcRenderer.invoke('get-actions'),
+  saveActions: (actions) => ipcRenderer.invoke('save-actions', actions),
+  addAction: (action) => ipcRenderer.invoke('add-action', action),
+  deleteAction: (actionId) => ipcRenderer.invoke('delete-action', actionId)
 });
