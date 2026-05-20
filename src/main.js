@@ -1,12 +1,10 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const Store = require('electron-store');
 const { getCalendarEvents, checkOutlookAvailable } = require('./services/outlookService');
 
-const store = new Store();
-
 let mainWindow;
+let store;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -39,6 +37,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Initialize store after app is ready
+  const Store = require('electron-store');
+  store = new Store();
+
   createWindow();
 
   app.on('activate', function () {
