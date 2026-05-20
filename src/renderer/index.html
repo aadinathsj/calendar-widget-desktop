@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendar Widget</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <div class="window-controls">
+      <button id="minimize-btn" class="control-btn">_</button>
+      <button id="close-btn" class="control-btn">×</button>
+    </div>
+
+    <div id="login-screen" class="screen">
+      <div class="login-container">
+        <h2>Calendar Widget</h2>
+        <p>Connect to your Outlook calendar</p>
+        <button id="login-btn" class="primary-btn">Sign in with Microsoft</button>
+      </div>
+    </div>
+
+    <div id="main-screen" class="screen hidden">
+      <header>
+        <h1>My Calendar</h1>
+        <div class="date-navigation">
+          <button id="prev-day" class="nav-btn">←</button>
+          <span id="current-date"></span>
+          <button id="next-day" class="nav-btn">→</button>
+        </div>
+        <button id="refresh-btn" class="refresh-btn">↻</button>
+      </header>
+
+      <div class="content">
+        <div id="calendar-view" class="calendar-container">
+          <div id="events-list"></div>
+        </div>
+
+        <div id="notes-view" class="notes-container hidden">
+          <div class="notes-header">
+            <h3 id="notes-meeting-title"></h3>
+            <button id="close-notes-btn" class="close-notes">×</button>
+          </div>
+          <div class="notes-metadata" id="notes-metadata"></div>
+          <textarea id="notes-editor" placeholder="Type your meeting notes here..."></textarea>
+          <div class="notes-actions">
+            <button id="save-notes-btn" class="primary-btn">Save Notes</button>
+            <span id="notes-status"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

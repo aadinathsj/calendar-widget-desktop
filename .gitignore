@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+.env
+.env.local
+meeting-notes/
+*.md.backup
+
+# Electron build output
+out/
+release/
+
+# User data
+userData/

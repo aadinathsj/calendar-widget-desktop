@@ -1,0 +1,30 @@
+{
+  "name": "outlook-calendar-widget",
+  "version": "1.0.0",
+  "description": "Desktop widget for Outlook calendar with notes",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.firstsolar.calendar-widget",
+    "productName": "Calendar Widget",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    }
+  },
+  "dependencies": {
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@azure/msal-node": "^2.6.6",
+    "electron-store": "^8.1.0",
+    "markdown-it": "^14.0.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  }
+}
