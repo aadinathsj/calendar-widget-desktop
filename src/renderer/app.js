@@ -1728,6 +1728,9 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
 }
 
 function openAddActionModal() {
+  // Close theme picker if open
+  document.getElementById('theme-picker').classList.add('hidden');
+
   document.getElementById('action-modal').classList.remove('hidden');
   document.getElementById('action-title-input').value = '';
   document.getElementById('action-url-input').value = '';
@@ -1781,6 +1784,9 @@ async function handleAddAction(e) {
 }
 
 function openAddFolderModal() {
+  // Close theme picker if open
+  document.getElementById('theme-picker').classList.add('hidden');
+
   const modal = document.getElementById('folder-modal');
   const input = document.getElementById('folder-title-input');
 
@@ -1905,11 +1911,71 @@ function toggleActionExpand(actionId, cardElement) {
   }
 }
 
+// Helper: Get all child folder IDs recursively
+function getAllChildFolderIds(parentId, visited = new Set()) {
+  // Prevent infinite loops from circular references
+  if (visited.has(parentId)) return [];
+  visited.add(parentId);
+
+  const childIds = [];
+
+  // Find direct children that are folders
+  const children = actions.filter(a => a.parentId === parentId && a.type === 'folder');
+
+  children.forEach(child => {
+    childIds.push(child.id);
+    // Recursively get nested child folders
+    const nestedChildren = getAllChildFolderIds(child.id, visited);
+    childIds.push(...nestedChildren);
+  });
+
+  return childIds;
+}
+
+// Helper: Get all action IDs from a list of folder IDs
+function getAllChildActionIds(folderIds) {
+  const actionIds = [];
+
+  folderIds.forEach(folderId => {
+    // Find all actions that belong to this folder
+    const childActions = actions.filter(a => a.parentId === folderId && a.type === 'action');
+    childActions.forEach(action => {
+      actionIds.push(action.id);
+    });
+  });
+
+  return actionIds;
+}
+
 // Toggle folder expand/collapse
 function toggleFolderExpand(folderId) {
   if (expandedFolders.has(folderId)) {
+    // Collapsing: remove this folder and all nested child folders/actions from expanded state
     expandedFolders.delete(folderId);
-    // If closing the current expanded folder, clear it
+
+    // Get all child folder IDs recursively
+    const childFolderIds = getAllChildFolderIds(folderId);
+
+    // Collapse all child folders
+    childFolderIds.forEach(childId => {
+      expandedFolders.delete(childId);
+      // Clear currentExpandedFolder if it's one of the collapsed folders
+      if (currentExpandedFolder === childId) {
+        currentExpandedFolder = null;
+      }
+    });
+
+    // Get all child action IDs from this folder and all nested child folders
+    const allFolderIds = [folderId, ...childFolderIds];
+    const childActionIds = getAllChildActionIds(allFolderIds);
+
+    // Collapse all child actions
+    childActionIds.forEach(actionId => {
+      expandedActions.delete(actionId);
+      editedActions.delete(actionId); // Also clear edited state
+    });
+
+    // Clear currentExpandedFolder if it's the parent folder being collapsed
     if (currentExpandedFolder === folderId) {
       currentExpandedFolder = null;
     }
