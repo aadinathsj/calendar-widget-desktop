@@ -11,7 +11,7 @@
     "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1"
   },
   "build": {
-    "appId": "com.firstsolar.calendar-widget",
+    "appId": "com.outlook.calendar-widget",
     "productName": "Calendar Widget",
     "win": {
       "target": "nsis",
