@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addAction: (action) => ipcRenderer.invoke('add-action', action),
   deleteAction: (actionId) => ipcRenderer.invoke('delete-action', actionId),
 
+  // Fast-startup APIs
+  checkAndGetEvents: (startDate, endDate) => ipcRenderer.invoke('check-and-get-events', startDate, endDate),
+  getCachedEvents: (dateKey) => ipcRenderer.invoke('get-cached-events', dateKey),
+  saveEventsCache: (events, dateKey) => ipcRenderer.invoke('save-events-cache', events, dateKey),
+  saveEventsRangeCache: (eventsMap) => ipcRenderer.invoke('save-events-range-cache', eventsMap),
+
   // Open URL in system default browser (Chrome)
   openExternal: (url) => ipcRenderer.invoke('open-external', url)
 });

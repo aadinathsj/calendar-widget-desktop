@@ -162,8 +162,8 @@ body {
 .tab-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: var(--space-2);
+  gap: 8px;
+  padding: 10px 12px;
   background: rgba(0, 0, 0, 0.15);
   border-bottom: 1px solid var(--glass-border);
   backdrop-filter: var(--blur-medium);
@@ -173,19 +173,25 @@ body {
   flex: 1;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
-  padding: 10px var(--space-2);
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
+  font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-smooth);
   color: var(--text-secondary);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
+  white-space: nowrap;
+  min-height: 36px;
+}
+
+.tab-btn .icon {
+  flex-shrink: 0;
 }
 
 .tab-btn::before {
@@ -229,7 +235,10 @@ body {
   flex: 0 0 auto;
   width: 40px;
   padding: 0;
-  align-self: stretch;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Screens */
@@ -292,6 +301,13 @@ body {
   padding: var(--space-2);
   scroll-behavior: smooth;
   position: relative;
+}
+
+/* Week view content - no overflow */
+#weekview-content {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Scroll fade masks */
@@ -403,6 +419,17 @@ body {
   transform: translateY(0) scale(0.98);
 }
 
+/* Spinning state during background refresh */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+#refresh-btn.spinning svg {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+}
+
 .refresh-btn:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
@@ -494,6 +521,31 @@ body {
 .event-card.selected {
   border-color: rgba(47, 107, 255, 0.6);
   box-shadow: 0 0 0 1px rgba(47, 107, 255, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* Glow effect when navigating from heatmap */
+.event-card.event-glow {
+  border-color: var(--accent-cyan);
+  box-shadow:
+    0 0 0 2px rgba(91, 203, 255, 0.6),
+    0 0 20px rgba(91, 203, 255, 0.4),
+    0 4px 24px rgba(0, 0, 0, 0.3);
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(91, 203, 255, 0.6),
+      0 0 20px rgba(91, 203, 255, 0.4),
+      0 4px 24px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(91, 203, 255, 0.8),
+      0 0 30px rgba(91, 203, 255, 0.6),
+      0 4px 28px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* Meeting status accent bar colors */
@@ -633,16 +685,64 @@ body {
 /* Actions Section */
 .actions-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: var(--space-2);
+}
+
+.actions-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Search bar */
+.action-search-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.action-search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.action-search-input {
+  width: 100%;
+  padding: 8px 10px 8px 32px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font-family: inherit;
+  transition: all var(--transition-smooth);
+  backdrop-filter: var(--blur-medium);
+}
+
+.action-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.action-search-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 2px var(--accent-blue-subtle);
 }
 
 .add-action-btn {
   background: rgba(47, 107, 255, 0.75);
   color: var(--text-on-accent);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  padding: 8px 14px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: 500;
@@ -651,7 +751,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(47, 107, 255, 0.2);
 }
 
@@ -1236,8 +1336,19 @@ body {
   font-weight: 600;
 }
 
+/* Notes scroll area — flex:1 so it fills space between header and footer */
+.notes-container > .scroll-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
 #notes-editor {
   flex: 1;
+  min-height: 0;
   padding: var(--space-2);
   border: none;
   resize: none;
@@ -1250,7 +1361,6 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
-  min-height: 200px;
 }
 
 #notes-editor::placeholder {
@@ -1259,6 +1369,7 @@ body {
 }
 
 .notes-actions {
+  flex-shrink: 0;
   padding: var(--space-2);
   border-top: 1px solid var(--glass-border);
   display: flex;
@@ -1441,4 +1552,194 @@ textarea:focus-visible {
   .action-card {
     border-width: 2px;
   }
+}
+
+/* ===== WEEK VIEW / HEATMAP ===== */
+
+.weekview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--glass-elevated);
+  padding: 8px var(--space-2);
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-border-inner);
+  backdrop-filter: var(--blur-medium);
+}
+
+#current-week {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.01em;
+}
+
+.heatmap-container {
+  padding: 12px var(--space-2) var(--space-2) var(--space-2);
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: 40px repeat(7, 1fr);
+  grid-template-rows: auto repeat(10, 1fr);
+  gap: 5px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Header cells (day labels) */
+.heatmap-day-header {
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.heatmap-day-header.today {
+  color: var(--accent-cyan);
+  background: rgba(91, 203, 255, 0.1);
+  border-color: rgba(91, 203, 255, 0.3);
+}
+
+/* Time labels (left column) */
+.heatmap-time-label {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+/* Heatmap blocks */
+.heatmap-block {
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all var(--transition-smooth);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* Empty block (no meeting) */
+.heatmap-block.empty {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Has meeting (full or multiple meetings) */
+.heatmap-block.has-meeting {
+  background: var(--accent-blue);
+  border-color: rgba(47, 107, 255, 0.4);
+  box-shadow: 0 0 8px rgba(47, 107, 255, 0.15);
+}
+
+/* Short meeting (<60 min) */
+.heatmap-block.short-meeting {
+  background: rgba(47, 107, 255, 0.4);
+  border-color: rgba(47, 107, 255, 0.25);
+}
+
+/* Current hour highlight */
+.heatmap-block.current-hour {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(91, 203, 255, 0.4);
+  border-width: 2px;
+}
+
+.heatmap-block.current-hour.empty {
+  background: rgba(91, 203, 255, 0.08);
+}
+
+/* Past time blocks (dimmed) */
+.heatmap-block.past {
+  opacity: 0.4;
+}
+
+/* Hover state */
+.heatmap-block:hover {
+  transform: scale(1.08);
+  z-index: 2;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.heatmap-block.has-meeting:hover {
+  background: rgba(47, 107, 255, 0.9);
+  box-shadow: 0 4px 16px rgba(47, 107, 255, 0.35);
+}
+
+.heatmap-block.short-meeting:hover {
+  background: rgba(47, 107, 255, 0.6);
+}
+
+.heatmap-block.empty:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Active/click state */
+.heatmap-block:active {
+  transform: scale(1.02);
+}
+
+/* Focus visible for accessibility */
+.heatmap-block:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+  z-index: 3;
+}
+
+/* Tooltip for heatmap blocks (optional future enhancement) */
+.heatmap-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--glass-elevated);
+  backdrop-filter: var(--blur-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-smooth);
+  z-index: 10;
+  margin-bottom: 4px;
+  box-shadow: var(--shadow-elevated);
+}
+
+.heatmap-block:hover .heatmap-tooltip {
+  opacity: 1;
+}
+
+/* Loading state */
+.heatmap-loading {
+  grid-column: 2 / -1;
+  grid-row: 2 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
 }

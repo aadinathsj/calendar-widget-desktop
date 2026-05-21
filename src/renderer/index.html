@@ -110,6 +110,20 @@
         <path d="M8 17V9.5a4 4 0 0 1 8 0V17" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         <line x1="12" y1="5.5" x2="12" y2="3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
       </symbol>
+
+      <!-- Search Icon -->
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
+
+      <!-- Grid Icon (for heatmap/week view) -->
+      <symbol id="icon-grid" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -151,6 +165,12 @@
             </svg>
             <span>Actions</span>
           </button>
+          <button id="weekview-tab" class="tab-btn" role="tab" aria-selected="false" aria-controls="weekview-content">
+            <svg class="icon" width="18" height="18" aria-hidden="true">
+              <use href="#icon-grid"/>
+            </svg>
+            <span>Week View</span>
+          </button>
           <button id="refresh-btn" class="tab-btn tab-btn-icon-only" aria-label="Refresh events">
             <svg class="icon" width="18" height="18" aria-hidden="true">
               <use href="#icon-refresh"/>
@@ -185,18 +205,48 @@
           <!-- Actions Tab -->
           <div id="actions-content" class="tab-content hidden" role="tabpanel" aria-labelledby="actions-tab">
             <div class="actions-header">
-              <button id="add-action-btn" class="add-action-btn" aria-label="Add new action">
-                <svg class="icon" width="18" height="18" aria-hidden="true">
-                  <use href="#icon-plus"/>
-                </svg>
-                Add Action
-              </button>
+              <div class="actions-toolbar">
+                <div class="action-search-wrapper">
+                  <svg class="icon action-search-icon" width="14" height="14" aria-hidden="true">
+                    <use href="#icon-search"/>
+                  </svg>
+                  <input type="text" id="action-search-input" class="action-search-input" placeholder="Search actions..." aria-label="Search actions" autocomplete="off">
+                </div>
+                <button id="add-action-btn" class="add-action-btn" aria-label="Add new action">
+                  <svg class="icon" width="16" height="16" aria-hidden="true">
+                    <use href="#icon-plus"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div class="scroll-container">
               <div class="scroll-fade scroll-fade-top" aria-hidden="true"></div>
               <div id="actions-list" class="scrollable" role="list" aria-label="Quick actions"></div>
               <div class="scroll-fade scroll-fade-bottom" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <!-- Week View Tab -->
+          <div id="weekview-content" class="tab-content hidden" role="tabpanel" aria-labelledby="weekview-tab">
+            <div class="weekview-header">
+              <button id="prev-week" class="nav-btn" aria-label="Previous week">
+                <svg class="icon" width="20" height="20" aria-hidden="true">
+                  <use href="#icon-chevron-left"/>
+                </svg>
+              </button>
+              <span id="current-week" aria-live="polite">Week of Mon, Jan 1, 2024</span>
+              <button id="next-week" class="nav-btn" aria-label="Next week">
+                <svg class="icon" width="20" height="20" aria-hidden="true">
+                  <use href="#icon-chevron-right"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="heatmap-container">
+              <div class="heatmap-grid" id="heatmap-grid">
+                <!-- Heatmap will be dynamically generated here -->
+              </div>
             </div>
           </div>
 

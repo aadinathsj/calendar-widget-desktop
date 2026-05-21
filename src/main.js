@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
-const { getCalendarEvents, checkOutlookAvailable } = require('./services/outlookService');
+const { getCalendarEvents, checkOutlookAvailable, checkAndGetEvents } = require('./services/outlookService');
 
 let mainWindow;
 
@@ -31,6 +31,11 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
+  });
+
+  // Show window immediately, even before content loads
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
   });
 
   mainWindow.loadFile('src/renderer/index.html');
@@ -146,8 +151,12 @@ ipcMain.handle('get-actions', async () => {
       const data = await fs.readFile(actionsFile, 'utf-8');
       return { success: true, actions: JSON.parse(data) };
     } catch (err) {
-      // File doesn't exist yet, return empty array
-      return { success: true, actions: [] };
+      if (err.code === 'ENOENT') {
+        // File doesn't exist yet — first run, return empty array
+        return { success: true, actions: [] };
+      }
+      // Any other error (permissions, corrupt JSON) should surface
+      throw err;
     }
   } catch (error) {
     return { success: false, error: error.message };
@@ -179,7 +188,10 @@ ipcMain.handle('add-action', async (event, action) => {
     // Add new action with timestamp ID
     const newAction = {
       id: Date.now().toString(),
-      ...action,
+      title: action.title || '',
+      url: action.url || '',
+      note: action.note || '',
+      pinned: false,
       createdAt: new Date().toISOString()
     };
 
@@ -201,6 +213,96 @@ ipcMain.handle('delete-action', async (event, actionId) => {
     actions = actions.filter(a => a.id !== actionId);
     await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
 
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ── Fast-startup handlers ─────────────────────────────────────────────────────
+
+// Combined Outlook check + event fetch in one PS process (saves ~2 s vs two calls)
+ipcMain.handle('check-and-get-events', async (event, startDate, endDate) => {
+  try {
+    const result = await checkAndGetEvents(new Date(startDate), new Date(endDate));
+    return { success: true, available: result.available, events: result.events };
+  } catch (error) {
+    return { success: false, available: false, events: [], error: error.message };
+  }
+});
+
+// Read cached events for a specific date (instant — no PS process needed)
+ipcMain.handle('get-cached-events', async (event, dateKey) => {
+  try {
+    const cacheFile = path.join(app.getPath('userData'), 'events-cache.json');
+    try {
+      const data = await fs.readFile(cacheFile, 'utf-8');
+      const cache = JSON.parse(data);
+
+      // If dateKey provided, return that specific day; otherwise return entire cache
+      if (dateKey && cache.days && cache.days[dateKey]) {
+        return { success: true, events: cache.days[dateKey], dateKey, fromCache: true };
+      } else if (dateKey) {
+        return { success: true, events: null, dateKey, fromCache: false };
+      } else {
+        // Return entire cache (for backward compatibility)
+        return { success: true, cache: cache.days || {}, cachedAt: cache.cachedAt };
+      }
+    } catch (err) {
+      if (err.code === 'ENOENT') return { success: true, events: null, dateKey, fromCache: false };
+      throw err;
+    }
+  } catch (error) {
+    return { success: false, events: null, dateKey, fromCache: false };
+  }
+});
+
+// Persist events for a single day
+ipcMain.handle('save-events-cache', async (event, events, dateKey) => {
+  try {
+    const cacheFile = path.join(app.getPath('userData'), 'events-cache.json');
+
+    // Read existing cache
+    let cache = { days: {}, cachedAt: new Date().toISOString() };
+    try {
+      const data = await fs.readFile(cacheFile, 'utf-8');
+      cache = JSON.parse(data);
+      if (!cache.days) cache.days = {};
+    } catch (err) {
+      // File doesn't exist, use empty cache
+    }
+
+    // Update the specific day
+    cache.days[dateKey] = events;
+    cache.cachedAt = new Date().toISOString();
+
+    await fs.writeFile(cacheFile, JSON.stringify(cache, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Persist events for multiple days (bulk cache for ±5 days)
+ipcMain.handle('save-events-range-cache', async (event, eventsMap) => {
+  try {
+    const cacheFile = path.join(app.getPath('userData'), 'events-cache.json');
+
+    // Read existing cache
+    let cache = { days: {}, cachedAt: new Date().toISOString() };
+    try {
+      const data = await fs.readFile(cacheFile, 'utf-8');
+      cache = JSON.parse(data);
+      if (!cache.days) cache.days = {};
+    } catch (err) {
+      // File doesn't exist, use empty cache
+    }
+
+    // Merge new events
+    Object.assign(cache.days, eventsMap);
+    cache.cachedAt = new Date().toISOString();
+
+    await fs.writeFile(cacheFile, JSON.stringify(cache, null, 2), 'utf-8');
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
