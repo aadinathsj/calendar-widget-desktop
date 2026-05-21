@@ -63,6 +63,8 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
 }
 
 #app {
@@ -71,7 +73,7 @@ body {
   display: flex;
   flex-direction: column;
   background: transparent;
-  padding: 12px;
+  padding: 0;
 }
 
 /* Glassmorphic container */
@@ -81,10 +83,7 @@ body {
   -webkit-backdrop-filter: var(--blur-strong);
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
-  box-shadow:
-    var(--shadow-soft),
-    inset 0 0 0 1px var(--glass-border-inner),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-soft);
   overflow: hidden;
   flex: 1;
   display: flex;
@@ -105,17 +104,19 @@ body {
 .window-controls {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
   background: linear-gradient(135deg,
-    rgba(47, 107, 255, 0.08) 0%,
-    rgba(91, 203, 255, 0.05) 100%);
+    var(--accent-blue-subtle) 0%,
+    rgba(91, 203, 255, 0.03) 100%);
   -webkit-app-region: drag;
   border-bottom: 1px solid var(--glass-border);
   cursor: grab;
   user-select: none;
-  min-height: 48px;
+  min-height: 52px;
   backdrop-filter: var(--blur-medium);
+  position: relative;
 }
 
 .window-controls:active {
@@ -143,9 +144,9 @@ body {
 }
 
 .control-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--accent-blue-subtle);
+  color: var(--accent-cyan);
+  border-color: var(--accent-blue);
   transform: translateY(-1px) scale(1.02);
 }
 
@@ -464,22 +465,7 @@ body {
   overflow: hidden;
 }
 
-/* Accent bar — color reflects the Outlook account the event belongs to */
-.event-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--account-color, var(--accent-blue));
-  transition: background var(--transition-smooth), opacity var(--transition-smooth);
-}
-
-/* Dim the blade for past meetings so done events recede visually */
-.event-card[data-state="past"]::before {
-  opacity: 0.35;
-}
+/* Remove the colored blade - using account name text instead */
 
 /* Specular highlight overlay on hover */
 .event-card::after,
@@ -566,7 +552,7 @@ body {
 
 /* Flat Event Card Layout */
 .event-card-body {
-  padding-left: 12px;
+  padding-left: 8px;
 }
 
 .event-time-row {
@@ -634,6 +620,14 @@ body {
   flex-shrink: 0;
 }
 
+/* Account name - subtle text */
+.event-account-name {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  font-weight: 400;
+}
+
 .teams-join-link {
   display: inline-flex;
   align-items: center;
@@ -641,19 +635,40 @@ body {
   font-size: var(--text-xs);
   color: var(--accent-cyan);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
   margin-top: 8px;
-  opacity: 0.8;
-  transition: opacity var(--transition-smooth);
+  background: var(--accent-blue-subtle);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue-glow), 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all var(--transition-smooth);
 }
 
 .teams-join-link:hover {
-  opacity: 1;
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-cyan);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--accent-cyan), 0 4px 12px var(--accent-blue-glow);
+}
+
+.teams-join-link:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .teams-join-link:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--accent-cyan);
   outline-offset: 2px;
+}
+
+/* Teams link row - flex layout for join button + account name */
+.event-teams-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 
 /* Action link (inside action cards) */
@@ -737,7 +752,7 @@ body {
 }
 
 .add-action-btn {
-  background: rgba(47, 107, 255, 0.75);
+  background: var(--accent-blue);
   color: var(--text-on-accent);
   border: 1px solid rgba(255, 255, 255, 0.15);
   width: 36px;
@@ -752,13 +767,13 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(47, 107, 255, 0.2);
+  box-shadow: 0 2px 8px var(--accent-blue-glow);
 }
 
 .add-action-btn:hover {
-  background: rgba(47, 107, 255, 0.9);
+  background: var(--accent-cyan);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(47, 107, 255, 0.25);
+  box-shadow: 0 4px 12px var(--accent-blue-glow);
 }
 
 .add-action-btn:active {
@@ -824,13 +839,13 @@ body {
 }
 
 .action-pin-btn.pinned {
-  background: rgba(91, 203, 255, 0.12);
-  border-color: rgba(91, 203, 255, 0.35);
+  background: var(--accent-blue-subtle);
+  border-color: var(--accent-blue-glow);
   color: var(--accent-cyan);
 }
 
 .action-pin-btn.pinned:hover {
-  background: rgba(91, 203, 255, 0.2);
+  background: var(--accent-blue-glow);
 }
 
 /* Action Body - Hidden by default */
@@ -892,16 +907,28 @@ body {
   flex: 1;
 }
 
-/* Action URL/Link */
-.action-url {
-  font-size: var(--text-xs);
-  color: var(--text-tertiary);
-  word-break: break-all;
-  opacity: 0.8;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.15);
-  border-radius: 8px;
+/* Action URL Input */
+.action-url-input {
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  font-size: var(--text-sm);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  transition: all var(--transition-smooth);
+  font-family: inherit;
+}
+
+.action-url-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.action-url-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 2px var(--accent-blue-subtle);
 }
 
 /* Action Buttons */
@@ -935,7 +962,8 @@ body {
 }
 
 .action-delete-btn {
-  color: #FF6B6B;
+  color: var(--text-tertiary);
+  opacity: 0.7;
 }
 
 .action-open-btn:hover {
@@ -946,10 +974,11 @@ body {
 }
 
 .action-delete-btn:hover {
-  background: rgba(255, 107, 107, 0.15);
-  border-color: rgba(255, 107, 107, 0.3);
-  color: #FF8888;
+  background: var(--accent-blue-subtle);
+  border-color: var(--accent-blue);
+  color: var(--accent-cyan);
   transform: translateY(-1px);
+  opacity: 1;
 }
 
 .action-open-btn:active,
@@ -963,52 +992,22 @@ body {
   outline-offset: 2px;
 }
 
-/* Action card expand/collapse button */
-.action-expand-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: var(--text-secondary);
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  border-radius: 7px;
-  transition: all var(--transition-smooth);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 0;
-}
-
-.action-expand-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.24);
-  color: var(--text-primary);
-}
-
-.action-expand-btn:active {
-  transform: scale(0.95);
-}
-
-.action-expand-btn:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-
-.action-expand-btn svg {
-  transition: transform var(--transition-smooth);
-}
-
-.action-card.expanded .action-expand-btn svg {
-  transform: rotate(180deg);
-}
-
-/* Action card header (always visible) */
+/* Action card header (always visible) - clickable to expand */
 .action-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-smooth);
+  padding: 4px;
+  margin: -4px;
+  border-radius: 8px;
+}
+
+.action-header:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 /* Action details (collapsible section) */
@@ -1193,16 +1192,16 @@ body {
 }
 
 .modal-btn-primary {
-  background: rgba(47, 107, 255, 0.8);
+  background: var(--accent-blue);
   color: var(--text-on-accent);
   border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 2px 8px rgba(47, 107, 255, 0.2);
+  box-shadow: 0 2px 8px var(--accent-blue-glow);
 }
 
 .modal-btn-primary:hover {
-  background: rgba(47, 107, 255, 0.95);
+  background: var(--accent-cyan);
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(47, 107, 255, 0.3);
+  box-shadow: 0 4px 14px var(--accent-blue-glow);
 }
 
 .modal-btn-primary:active {
@@ -1431,13 +1430,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(47, 107, 255, 0.3);
+  background: var(--accent-blue-glow);
   border-radius: 3px;
   transition: all var(--transition-smooth);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(47, 107, 255, 0.5);
+  background: var(--accent-blue);
 }
 
 ::-webkit-scrollbar-corner {
@@ -1514,6 +1513,102 @@ textarea:focus-visible {
   );
   background-size: 200% 100%;
   animation: shimmer 2s infinite;
+}
+
+/* ===== THEME PICKER ===== */
+
+.theme-picker {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  background: var(--glass-elevated);
+  backdrop-filter: var(--blur-strong);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  box-shadow: var(--shadow-elevated);
+  z-index: 1000;
+  min-width: 180px;
+  animation: fadeIn 200ms ease-out;
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  border: 1px solid transparent;
+}
+
+.theme-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.theme-option.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--accent-blue);
+}
+
+.theme-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.theme-name {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Theme-specific CSS variables */
+[data-theme="ocean-blue"] {
+  --accent-blue: #2F6BFF;
+  --accent-cyan: #5BCBFF;
+  --accent-blue-subtle: rgba(47, 107, 255, 0.15);
+  --accent-blue-glow: rgba(47, 107, 255, 0.3);
+}
+
+[data-theme="purple-nebula"] {
+  --accent-blue: #9333EA;
+  --accent-cyan: #C084FC;
+  --accent-blue-subtle: rgba(147, 51, 234, 0.15);
+  --accent-blue-glow: rgba(147, 51, 234, 0.3);
+}
+
+[data-theme="emerald-green"] {
+  --accent-blue: #10B981;
+  --accent-cyan: #34D399;
+  --accent-blue-subtle: rgba(16, 185, 129, 0.15);
+  --accent-blue-glow: rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="sunset-orange"] {
+  --accent-blue: #F59E0B;
+  --accent-cyan: #FBBF24;
+  --accent-blue-subtle: rgba(245, 158, 11, 0.15);
+  --accent-blue-glow: rgba(245, 158, 11, 0.3);
+}
+
+[data-theme="matte-black"] {
+  --accent-blue: #374151;
+  --accent-cyan: #6B7280;
+  --accent-blue-subtle: rgba(55, 65, 81, 0.15);
+  --accent-blue-glow: rgba(55, 65, 81, 0.3);
+}
+
+[data-theme="crimson-red"] {
+  --accent-blue: #DC2626;
+  --accent-cyan: #EF4444;
+  --accent-blue-subtle: rgba(220, 38, 38, 0.15);
+  --accent-blue-glow: rgba(220, 38, 38, 0.3);
 }
 
 /* Reduced motion support */
@@ -1612,8 +1707,8 @@ textarea:focus-visible {
 
 .heatmap-day-header.today {
   color: var(--accent-cyan);
-  background: rgba(91, 203, 255, 0.1);
-  border-color: rgba(91, 203, 255, 0.3);
+  background: var(--accent-blue-subtle);
+  border-color: var(--accent-blue-glow);
 }
 
 /* Time labels (left column) */
@@ -1655,19 +1750,30 @@ textarea:focus-visible {
 
 /* Short meeting (<60 min) */
 .heatmap-block.short-meeting {
-  background: rgba(47, 107, 255, 0.4);
-  border-color: rgba(47, 107, 255, 0.25);
+  background: var(--accent-blue-subtle);
+  border-color: var(--accent-blue-glow);
 }
 
 /* Current hour highlight */
 .heatmap-block.current-hour {
   border-color: var(--accent-cyan);
-  box-shadow: 0 0 12px rgba(91, 203, 255, 0.4);
+  box-shadow: 0 0 12px rgba(91, 203, 255, 0.4), inset 0 0 0 1px var(--accent-cyan);
   border-width: 2px;
+  position: relative;
 }
 
 .heatmap-block.current-hour.empty {
   background: rgba(91, 203, 255, 0.08);
+}
+
+.heatmap-block.current-hour::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 5px;
+  border: 2px solid var(--accent-cyan);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 /* Past time blocks (dimmed) */
@@ -1688,7 +1794,8 @@ textarea:focus-visible {
 }
 
 .heatmap-block.short-meeting:hover {
-  background: rgba(47, 107, 255, 0.6);
+  background: var(--accent-blue-glow);
+  border-color: var(--accent-blue);
 }
 
 .heatmap-block.empty:hover {

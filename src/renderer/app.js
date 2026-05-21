@@ -23,8 +23,14 @@ let countdownInterval = null;
 let currentWeekStart = null; // Will be set to Monday of current week
 let highlightEventAtHour = null; // Hour to highlight when navigating from heatmap
 
+// Theme state
+let currentTheme = 'ocean-blue';
+
 // Initialize the app
 async function init() {
+  // Load saved theme first
+  loadTheme();
+
   // Setup listeners synchronously (fast)
   setupEventListeners();
   setupKeyboardNavigation();
@@ -234,6 +240,30 @@ function setupEventListeners() {
     if (e.target.id === 'action-modal') {
       closeAddActionModal();
     }
+  });
+
+  // Theme picker
+  document.getElementById('theme-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleThemePicker();
+  });
+
+  // Close theme picker when clicking outside
+  document.addEventListener('click', (e) => {
+    const themePicker = document.getElementById('theme-picker');
+    const themeBtn = document.getElementById('theme-btn');
+    if (!themePicker.contains(e.target) && e.target !== themeBtn && !themeBtn.contains(e.target)) {
+      themePicker.classList.add('hidden');
+    }
+  });
+
+  // Theme options
+  document.querySelectorAll('.theme-option').forEach(option => {
+    option.addEventListener('click', () => {
+      const theme = option.dataset.theme;
+      setTheme(theme);
+      document.getElementById('theme-picker').classList.add('hidden');
+    });
   });
 }
 
@@ -674,13 +704,6 @@ function createEventCard(event) {
   const state = getMeetingState(event);
   card.setAttribute('data-state', state);
 
-  if (event.accountColor) {
-    card.style.setProperty('--account-color', event.accountColor);
-  }
-  if (event.accountName) {
-    card.setAttribute('data-account', event.accountName);
-  }
-
   const startTime = new Date(event.start).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
@@ -720,11 +743,18 @@ function createEventCard(event) {
           ` : ''}
         </div>
       ` : ''}
-      ${event.teamsLink ? `
-        <a href="#" class="teams-join-link" data-teams-url="${escapeHtml(event.teamsLink)}">
-          <svg width="12" height="12" aria-hidden="true"><use href="#icon-video"/></svg>
-          Join Teams
-        </a>
+      ${event.teamsLink || event.accountName ? `
+        <div class="event-teams-row">
+          ${event.teamsLink ? `
+            <a href="#" class="teams-join-link" data-teams-url="${escapeHtml(event.teamsLink)}">
+              <svg width="12" height="12" aria-hidden="true"><use href="#icon-video"/></svg>
+              Join Teams
+            </a>
+          ` : ''}
+          ${event.accountName ? `
+            <span class="event-account-name">${escapeHtml(event.accountName)}</span>
+          ` : ''}
+        </div>
       ` : ''}
     </div>
   `;
@@ -780,13 +810,21 @@ async function openNotes(event) {
   metadata.innerHTML = `
     <div><strong>Time:</strong> ${startTime}</div>
     ${event.location ? `<div><strong>Location:</strong> ${escapeHtml(event.location)}</div>` : ''}
-    ${event.teamsLink ? `<div><strong>Teams:</strong> <a href="#" class="teams-meeting-link" data-teams-url="${escapeHtml(event.teamsLink)}">Join Meeting</a></div>` : ''}
+    ${event.teamsLink ? `
+      <div style="margin-top: 8px;">
+        <a href="#" class="teams-join-link" data-teams-url="${escapeHtml(event.teamsLink)}">
+          <svg width="12" height="12" aria-hidden="true"><use href="#icon-video"/></svg>
+          Join Teams
+        </a>
+      </div>
+    ` : ''}
     <div><strong>Organizer:</strong> ${escapeHtml(event.organizer)}</div>
+    ${event.accountName ? `<div style="margin-top: 4px; opacity: 0.5;"><strong>Account:</strong> ${escapeHtml(event.accountName)}</div>` : ''}
   `;
 
   // Handle Teams link in metadata
   if (event.teamsLink) {
-    const teamsMetaLink = metadata.querySelector('.teams-meeting-link');
+    const teamsMetaLink = metadata.querySelector('.teams-join-link');
     if (teamsMetaLink) {
       teamsMetaLink.addEventListener('click', (e) => {
         e.preventDefault();
@@ -933,9 +971,6 @@ function createActionCard(action) {
         <div class="action-title">${escapeHtml(action.title)}</div>
       </div>
       <div class="action-buttons">
-        <button class="action-expand-btn" aria-label="Expand/Collapse" title="Expand/Collapse">
-          <svg class="icon" width="16" height="16" aria-hidden="true"><use href="#icon-chevron-down"/></svg>
-        </button>
         <button class="action-pin-btn${action.pinned ? ' pinned' : ''}" aria-label="${action.pinned ? 'Unpin' : 'Pin to top'}" title="${action.pinned ? 'Unpin' : 'Pin to top'}">
           <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-pin"/></svg>
         </button>
@@ -946,7 +981,10 @@ function createActionCard(action) {
       </div>
     </div>
     <div class="action-details">
-      ${action.url ? `<div class="action-url">${escapeHtml(action.url)}</div>` : ''}
+      <div class="form-group">
+        <label>URL</label>
+        <input type="url" class="action-url-input" placeholder="https://..." value="${escapeHtml(action.url || '')}">
+      </div>
       <div class="form-group">
         <label>Note</label>
         <textarea class="action-note" placeholder="Add notes about this action..." rows="3">${escapeHtml(action.note || '')}</textarea>
@@ -955,16 +993,19 @@ function createActionCard(action) {
   `;
 
   // Add event listeners (not using onclick to properly handle events)
-  const expandBtn = card.querySelector('.action-expand-btn');
   const pinBtn   = card.querySelector('.action-pin-btn');
   const openBtn = card.querySelector('.action-open-btn');
   const deleteBtn = card.querySelector('.action-delete-btn');
   const noteArea = card.querySelector('.action-note');
+  const urlInput = card.querySelector('.action-url-input');
+  const actionHeader = card.querySelector('.action-header');
 
-  // Expand/collapse handler
-  expandBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleActionExpand(action.id, card);
+  // Click anywhere on card header to expand/collapse
+  actionHeader.addEventListener('click', (e) => {
+    // Only expand if not clicking on a button
+    if (!e.target.closest('button')) {
+      toggleActionExpand(action.id, card);
+    }
   });
 
   // Pin/unpin handler
@@ -973,11 +1014,14 @@ function createActionCard(action) {
     pinAction(action.id);
   });
 
-  // Open action handler (only if URL exists)
-  if (openBtn && action.url) {
+  // Open action handler - get current URL from input
+  if (openBtn) {
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openAction(action.url);
+      const currentUrl = urlInput.value.trim();
+      if (currentUrl) {
+        openAction(currentUrl);
+      }
     });
   }
 
@@ -985,6 +1029,16 @@ function createActionCard(action) {
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     deleteAction(action.id);
+  });
+
+  // Save URL on change (debounced)
+  let urlTimeout;
+  urlInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    clearTimeout(urlTimeout);
+    urlTimeout = setTimeout(() => {
+      saveActionUrl(action.id, e.target.value);
+    }, 1000);
   });
 
   // Save note on change (debounced)
@@ -1119,6 +1173,30 @@ async function saveActionNote(actionId, note) {
     }
   } catch (error) {
     console.error('Error saving action note:', error);
+  }
+}
+
+// Save action URL
+async function saveActionUrl(actionId, url) {
+  try {
+    // Find the action in the array
+    const action = actions.find(a => a.id === actionId);
+    if (!action) return;
+
+    // Update the URL
+    action.url = url;
+
+    // Save to backend
+    const result = await window.electronAPI.saveActions(actions);
+
+    if (!result.success) {
+      console.error('Error saving action URL:', result.error);
+    }
+
+    // Update the Open button visibility
+    displayActions();
+  } catch (error) {
+    console.error('Error saving action URL:', error);
   }
 }
 
@@ -1474,6 +1552,33 @@ function applyEventHighlight(clickedHour) {
   if (!foundEvent) {
     console.log(`No event found for hour ${clickedHour}`);
   }
+}
+
+// ===== THEME FUNCTIONS =====
+
+function loadTheme() {
+  const savedTheme = localStorage.getItem('calendar-theme') || 'ocean-blue';
+  setTheme(savedTheme, false); // Don't save on initial load
+}
+
+function setTheme(themeName, save = true) {
+  currentTheme = themeName;
+  document.documentElement.setAttribute('data-theme', themeName);
+
+  // Update active state in picker
+  document.querySelectorAll('.theme-option').forEach(opt => {
+    opt.classList.toggle('active', opt.dataset.theme === themeName);
+  });
+
+  // Save to localStorage
+  if (save) {
+    localStorage.setItem('calendar-theme', themeName);
+  }
+}
+
+function toggleThemePicker() {
+  const picker = document.getElementById('theme-picker');
+  picker.classList.toggle('hidden');
 }
 
 // ===== UTILITY FUNCTIONS =====
