@@ -1329,6 +1329,15 @@ function renderItemsRecursive(parentId, level = 0, visited = new Set()) {
         const newVisited = new Set(visited); // Clone visited set for this branch
         childrenContainer.appendChild(renderItemsRecursive(item.id, level + 1, newVisited));
         fragment.appendChild(childrenContainer);
+
+        // Add end-of-folder line if folder has children
+        const childCount = actions.filter(a => a.parentId === item.id).length;
+        if (childCount > 0) {
+          const endLine = document.createElement('div');
+          endLine.className = 'folder-end-line';
+          endLine.dataset.level = level;
+          fragment.appendChild(endLine);
+        }
       }
     } else {
       const actionCard = createActionCard(item, level);
