@@ -16,6 +16,16 @@ let isSaving = false;
 // Action card expanded state (in-memory)
 let expandedActions = new Set();
 
+// Track if action has been edited (used for collapse behavior)
+let editedActions = new Set();
+
+// Track clicks on action title for edit mode (triple-click detection)
+let titleClickTracker = {
+  actionId: null,
+  clickCount: 0,
+  lastClickTime: 0
+};
+
 // Folder expanded state
 let expandedFolders = new Set();
 
@@ -421,7 +431,9 @@ function setupEventListeners() {
   // URL/Path mutual exclusivity in action modal
   document.getElementById('action-url-input').addEventListener('input', (e) => {
     const pathInput = document.getElementById('action-path-input');
-    if (e.target.value.trim()) {
+    let urlValue = e.target.value.trim();
+
+    if (urlValue) {
       pathInput.disabled = true;
       pathInput.placeholder = 'URL is set - clear URL to use path';
     } else {
@@ -1539,10 +1551,32 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
     }
   });
 
-  // Double-click title to edit
-  actionTitle.addEventListener('dblclick', (e) => {
+  // Triple-click title to edit
+  actionTitle.addEventListener('click', (e) => {
     e.stopPropagation();
-    makeEditableTitle(actionTitle, action.id, 'action');
+
+    const now = Date.now();
+    const timeSinceLastClick = now - titleClickTracker.lastClickTime;
+
+    // Reset if clicking different action or if more than 500ms between clicks
+    if (titleClickTracker.actionId !== action.id || timeSinceLastClick > 500) {
+      titleClickTracker.actionId = action.id;
+      titleClickTracker.clickCount = 1;
+      titleClickTracker.lastClickTime = now;
+    } else {
+      // Same action, within time window
+      titleClickTracker.clickCount++;
+      titleClickTracker.lastClickTime = now;
+
+      // Triple-click detected - enter edit mode
+      if (titleClickTracker.clickCount === 3) {
+        makeEditableTitle(actionTitle, action.id, 'action');
+        // Reset tracker
+        titleClickTracker.actionId = null;
+        titleClickTracker.clickCount = 0;
+        titleClickTracker.lastClickTime = 0;
+      }
+    }
   });
 
   // Save button - manually save all fields immediately
@@ -1560,6 +1594,10 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
     if (result.success) {
       saveBtn.style.color = '#10b981'; // Green
       saveBtn.style.transform = 'scale(1.1)';
+
+      // Mark as edited so collapse behavior will work
+      editedActions.add(action.id);
+
       setTimeout(() => {
         saveBtn.style.color = '';
         saveBtn.style.transform = '';
@@ -1599,43 +1637,35 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
     deleteAction(action.id);
   });
 
-  // URL/Path mutual exclusivity
-  urlInput.addEventListener('input', (e) => {
-    e.stopPropagation();
-    if (e.target.value.trim()) {
-      pathInput.disabled = true;
-    } else {
-      pathInput.disabled = false;
-    }
-  });
-
-  pathInput.addEventListener('input', (e) => {
-    e.stopPropagation();
-    if (e.target.value.trim()) {
-      urlInput.disabled = true;
-    } else {
-      urlInput.disabled = false;
-    }
-  });
-
-  // Set initial disabled state
+  // Set initial disabled state based on which field has a value
   if (urlInput.value.trim()) {
     pathInput.disabled = true;
   } else if (pathInput.value.trim()) {
     urlInput.disabled = true;
   }
 
-  // Save URL on change (debounced)
+  // Save URL on change (debounced) with mutual exclusivity
   let urlTimeout;
   urlInput.addEventListener('input', (e) => {
     e.stopPropagation();
+
+    let urlValue = e.target.value.trim();
+
+    // Mutual exclusivity: disable path input if URL has value
+    if (urlValue) {
+      pathInput.disabled = true;
+    } else {
+      pathInput.disabled = false;
+    }
+
+    // Debounced save
     clearTimeout(urlTimeout);
     urlTimeout = setTimeout(() => {
-      saveActionField(action.id, 'url', e.target.value);
+      saveActionField(action.id, 'url', urlValue);
     }, 1000);
   });
 
-  // Save path on change (debounced) with validation
+  // Save path on change (debounced) with validation and mutual exclusivity
   let pathTimeout;
   pathInput.addEventListener('input', (e) => {
     e.stopPropagation();
@@ -1648,6 +1678,14 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
       e.target.value = pathValue;
     }
 
+    // Mutual exclusivity: disable URL input if path has value
+    if (pathValue) {
+      urlInput.disabled = true;
+    } else {
+      urlInput.disabled = false;
+    }
+
+    // Debounced save and validation
     clearTimeout(pathTimeout);
     pathTimeout = setTimeout(async () => {
       saveActionField(action.id, 'path', pathValue);
@@ -1811,20 +1849,48 @@ async function deleteAction(actionId) {
   }
 }
 
-function openAction(url) {
-  if (!url || !url.trim()) {
+function openAction(urlOrPath) {
+  if (!urlOrPath || !urlOrPath.trim()) {
     alert('No URL or path specified for this action');
     return;
   }
-  window.electronAPI.openExternal(url.trim());
+
+  let finalUrl = urlOrPath.trim();
+
+  // Convert Windows file paths to file:/// format for opening in browser
+  // Detect pattern like C:\Users\... or similar drive letter paths
+  if (/^[A-Za-z]:\\/.test(finalUrl)) {
+    // Split into drive and path components
+    const parts = finalUrl.split('\\');
+    const drive = parts[0]; // e.g., "C:"
+    const pathParts = parts.slice(1); // Everything after drive
+
+    // Encode each path segment (handles spaces and special chars)
+    const encodedParts = pathParts.map(part => encodeURIComponent(part));
+
+    // Reconstruct as file:/// URL
+    finalUrl = 'file:///' + drive.replace(':', '') + '/' + encodedParts.join('/');
+  }
+
+  window.electronAPI.openExternal(finalUrl);
 }
 
 // Toggle action card expand/collapse
 function toggleActionExpand(actionId, cardElement) {
-  if (expandedActions.has(actionId)) {
-    expandedActions.delete(actionId);
-    cardElement.classList.remove('expanded');
+  const isExpanded = expandedActions.has(actionId);
+  const hasBeenEdited = editedActions.has(actionId);
+
+  if (isExpanded) {
+    // If expanded and has been edited (saved), allow collapse
+    if (hasBeenEdited) {
+      expandedActions.delete(actionId);
+      cardElement.classList.remove('expanded');
+      // Clear edited flag after collapse
+      editedActions.delete(actionId);
+    }
+    // If expanded but not edited yet, do nothing (stay expanded)
   } else {
+    // Not expanded, so expand it
     expandedActions.add(actionId);
     cardElement.classList.add('expanded');
   }

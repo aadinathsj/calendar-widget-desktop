@@ -154,15 +154,17 @@ ipcMain.handle('close-window', () => {
 
 ipcMain.handle('open-external', async (event, urlOrPath) => {
   try {
-    // Detect if it's a file path (contains backslash or starts with a drive letter)
-    const isFilePath = urlOrPath.includes('\\') || urlOrPath.includes('/') && !urlOrPath.startsWith('http');
+    // file:// URLs (e.g. file:///C:/Users/.../file.html) must go through
+    // openExternal so the OS opens them in the default browser, not a native app.
+    const isUrl = urlOrPath.startsWith('http://') ||
+                  urlOrPath.startsWith('https://') ||
+                  urlOrPath.startsWith('file://');
 
-    if (isFilePath) {
-      // Use shell.openPath for file paths (opens in default app)
-      await shell.openPath(urlOrPath);
-    } else {
-      // Use shell.openExternal for URLs
+    if (isUrl) {
       await shell.openExternal(urlOrPath);
+    } else {
+      // Plain filesystem path — open in the default app for that file type
+      await shell.openPath(urlOrPath);
     }
   } catch (error) {
     console.error('Error opening:', error);
