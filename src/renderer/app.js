@@ -16,6 +16,12 @@ let isSaving = false;
 // Action card expanded state (in-memory)
 let expandedActions = new Set();
 
+// Folder expanded state
+let expandedFolders = new Set();
+
+// Currently expanded folder for smart creation
+let currentExpandedFolder = null;
+
 // Countdown timer
 let countdownInterval = null;
 
@@ -225,9 +231,20 @@ function setupEventListeners() {
   document.getElementById('save-notes-btn').addEventListener('click', saveNotes);
 
   // Actions
-  document.getElementById('add-action-btn').addEventListener('click', openAddActionModal);
+  document.getElementById('add-action-btn').addEventListener('click', () => {
+    clearExpandedFolderContext(); // Create at root level
+    openAddActionModal();
+  });
   document.getElementById('cancel-action-btn').addEventListener('click', closeAddActionModal);
   document.getElementById('action-form').addEventListener('submit', handleAddAction);
+
+  // Folders
+  document.getElementById('add-folder-btn').addEventListener('click', () => {
+    clearExpandedFolderContext(); // Create at root level
+    openAddFolderModal();
+  });
+  document.getElementById('cancel-folder-btn').addEventListener('click', closeAddFolderModal);
+  document.getElementById('folder-form').addEventListener('submit', handleAddFolder);
 
   // Actions search
   document.getElementById('action-search-input').addEventListener('input', (e) => {
@@ -239,6 +256,43 @@ function setupEventListeners() {
   document.getElementById('action-modal').addEventListener('click', (e) => {
     if (e.target.id === 'action-modal') {
       closeAddActionModal();
+    }
+  });
+
+  document.getElementById('folder-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'folder-modal') {
+      closeAddFolderModal();
+    }
+  });
+
+  // URL/Path mutual exclusivity in action modal
+  document.getElementById('action-url-input').addEventListener('input', (e) => {
+    const pathInput = document.getElementById('action-path-input');
+    if (e.target.value.trim()) {
+      pathInput.disabled = true;
+      pathInput.placeholder = 'URL is set - clear URL to use path';
+    } else {
+      pathInput.disabled = false;
+      pathInput.placeholder = 'C:\\Users\\...';
+    }
+  });
+
+  document.getElementById('action-path-input').addEventListener('input', (e) => {
+    // Strip quotes from pasted paths (Windows File Explorer adds quotes)
+    let pathValue = e.target.value.trim();
+    if ((pathValue.startsWith('"') && pathValue.endsWith('"')) ||
+        (pathValue.startsWith("'") && pathValue.endsWith("'"))) {
+      pathValue = pathValue.slice(1, -1);
+      e.target.value = pathValue;
+    }
+
+    const urlInput = document.getElementById('action-url-input');
+    if (pathValue) {
+      urlInput.disabled = true;
+      urlInput.placeholder = 'Path is set - clear path to use URL';
+    } else {
+      urlInput.disabled = false;
+      urlInput.placeholder = 'https://...';
     }
   });
 
@@ -343,10 +397,17 @@ function resetCardSelection() {
 }
 
 function handleEscapeKey() {
-  // Check if modal is open
-  const modal = document.getElementById('action-modal');
-  if (modal && !modal.classList.contains('hidden')) {
+  // Check if action modal is open
+  const actionModal = document.getElementById('action-modal');
+  if (actionModal && !actionModal.classList.contains('hidden')) {
     closeAddActionModal();
+    return;
+  }
+
+  // Check if folder modal is open
+  const folderModal = document.getElementById('folder-modal');
+  if (folderModal && !folderModal.classList.contains('hidden')) {
+    closeAddFolderModal();
     return;
   }
 
@@ -923,58 +984,261 @@ async function loadActions() {
   }
 }
 
+// Helper: Get breadcrumb path for an item (returns array of folder objects)
+function getBreadcrumbPath(itemId) {
+  const path = [];
+  const visited = new Set(); // Prevent circular references
+  let currentId = itemId;
+  const item = actions.find(a => a.id === currentId);
+  if (!item) return [];
+
+  // Walk up the parent chain
+  let parentId = item.parentId;
+  while (parentId) {
+    // Prevent infinite loops from circular references
+    if (visited.has(parentId)) {
+      console.error('Circular reference detected in folder hierarchy');
+      break;
+    }
+    visited.add(parentId);
+
+    const parent = actions.find(a => a.id === parentId);
+    if (!parent) break;
+    path.unshift({ title: parent.title, level: path.length });
+    parentId = parent.parentId;
+
+    // Safety: max 10 levels deep
+    if (path.length >= 10) break;
+  }
+
+  return path;
+}
+
+// Helper: Render breadcrumb pills with increasing opacity
+function renderBreadcrumbPills(breadcrumbPath) {
+  if (!breadcrumbPath || breadcrumbPath.length === 0) return '';
+
+  const pills = breadcrumbPath.map((folder, index) => {
+    // Opacity increases with depth: 30%, 50%, 70%, 90%
+    const opacity = Math.min(0.3 + (index * 0.2), 0.9);
+    return `<span class="breadcrumb-pill" style="background: rgba(var(--accent-rgb), ${opacity});">${escapeHtml(folder.title)}</span>`;
+  }).join('<svg class="breadcrumb-arrow" width="12" height="12" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="currentColor" fill="none" stroke-width="2"/></svg>');
+
+  return `<div class="breadcrumb-container">${pills}</div>`;
+}
+
+// Helper: Sort items (pinned first, then by creation date)
+function sortItems(items) {
+  return [...items].sort((a, b) => {
+    // Pinned items first
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+
+    // Then by creation date (newest first)
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+}
+
+// Render items recursively with hierarchy
+function renderItemsRecursive(parentId, level = 0, visited = new Set()) {
+  const fragment = document.createDocumentFragment();
+
+  // Safety: prevent infinite recursion
+  if (level > 10) {
+    console.error('Maximum nesting depth reached');
+    return fragment;
+  }
+
+  // Prevent circular references
+  if (parentId && visited.has(parentId)) {
+    console.error('Circular reference detected in folder hierarchy');
+    return fragment;
+  }
+
+  if (parentId) visited.add(parentId);
+
+  // Get children of this parent
+  const children = actions.filter(a => a.parentId === parentId);
+
+  // Sort children
+  const sorted = sortItems(children);
+
+  sorted.forEach(item => {
+    if (item.type === 'folder') {
+      const folderCard = createFolderCard(item, level);
+      fragment.appendChild(folderCard);
+
+      // If folder is expanded, render its children
+      if (expandedFolders.has(item.id)) {
+        const childrenContainer = document.createElement('div');
+        childrenContainer.className = 'folder-children';
+        const newVisited = new Set(visited); // Clone visited set for this branch
+        childrenContainer.appendChild(renderItemsRecursive(item.id, level + 1, newVisited));
+        fragment.appendChild(childrenContainer);
+      }
+    } else {
+      const actionCard = createActionCard(item, level);
+      fragment.appendChild(actionCard);
+    }
+  });
+
+  return fragment;
+}
+
 function displayActions() {
   const actionsList = document.getElementById('actions-list');
 
   if (actions.length === 0) {
-    actionsList.innerHTML = '<div class="no-actions">No actions yet. Click "+" to create one!</div>';
+    actionsList.innerHTML = '<div class="no-actions">No actions or folders yet.<br>Click "+" for actions or "📁" for folders!</div>';
     return;
   }
 
   const q = actionSearchQuery.trim().toLowerCase();
-  const filtered = q
-    ? actions.filter(a =>
-        a.title.toLowerCase().includes(q) ||
-        (a.note && a.note.toLowerCase().includes(q))
-      )
-    : actions;
 
-  if (filtered.length === 0) {
-    actionsList.innerHTML = '<div class="no-actions">No actions match your search.</div>';
-    return;
+  // If searching, show flat list with breadcrumbs
+  if (q) {
+    const filtered = actions.filter(a =>
+      a.title.toLowerCase().includes(q) ||
+      (a.note && a.note.toLowerCase().includes(q))
+    );
+
+    if (filtered.length === 0) {
+      actionsList.innerHTML = '<div class="no-actions">No actions match your search.</div>';
+      return;
+    }
+
+    actionsList.innerHTML = '';
+
+    // Sort and display with breadcrumbs
+    const sorted = sortItems(filtered);
+    sorted.forEach(item => {
+      const breadcrumbPath = getBreadcrumbPath(item.id);
+      const breadcrumbHtml = renderBreadcrumbPills(breadcrumbPath);
+
+      if (item.type === 'folder') {
+        const folderCard = createFolderCard(item, 0, breadcrumbHtml);
+        actionsList.appendChild(folderCard);
+      } else {
+        const actionCard = createActionCard(item, 0, breadcrumbHtml);
+        actionsList.appendChild(actionCard);
+      }
+    });
+  } else {
+    // Normal hierarchical view
+    actionsList.innerHTML = '';
+    actionsList.appendChild(renderItemsRecursive(null, 0));
   }
-
-  actionsList.innerHTML = '';
-
-  // Pinned actions float to the top
-  const sorted = [...filtered].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
-
-  sorted.forEach(action => {
-    const actionCard = createActionCard(action);
-    actionsList.appendChild(actionCard);
-  });
 }
 
-function createActionCard(action) {
+function createFolderCard(folder, level = 0, breadcrumbHtml = '') {
+  const card = document.createElement('div');
+  card.className = 'folder-card';
+  card.dataset.folderId = folder.id;
+  card.dataset.level = level;
+
+  const isExpanded = expandedFolders.has(folder.id);
+
+  // Count children
+  const childCount = actions.filter(a => a.parentId === folder.id).length;
+
+  card.innerHTML = `
+    <div class="folder-header">
+      ${breadcrumbHtml ? breadcrumbHtml : ''}
+      <div class="folder-header-content">
+        <svg class="icon folder-expand-icon ${isExpanded ? 'expanded' : ''}" width="14" height="14" aria-hidden="true">
+          <use href="#icon-chevron-right"/>
+        </svg>
+        <svg class="icon folder-icon" width="16" height="16" aria-hidden="true">
+          <use href="#icon-folder"/>
+        </svg>
+        <div class="folder-title">${escapeHtml(folder.title)} (${childCount})</div>
+        <div class="folder-buttons">
+          <button class="folder-add-action-btn" aria-label="Add action to this folder" title="Add action here">
+            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-plus"/></svg>
+          </button>
+          <button class="folder-add-subfolder-btn" aria-label="Add subfolder" title="Add subfolder">
+            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-folder"/></svg>
+          </button>
+          <button class="folder-pin-btn${folder.pinned ? ' pinned' : ''}" aria-label="${folder.pinned ? 'Unpin' : 'Pin to top'}" title="${folder.pinned ? 'Unpin' : 'Pin to top'}">
+            <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-pin"/></svg>
+          </button>
+          <button class="folder-delete-btn" aria-label="Delete folder" title="Delete folder">
+            <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Add event listeners
+  const folderHeader = card.querySelector('.folder-header-content');
+  const addActionBtn = card.querySelector('.folder-add-action-btn');
+  const addSubfolderBtn = card.querySelector('.folder-add-subfolder-btn');
+  const pinBtn = card.querySelector('.folder-pin-btn');
+  const deleteBtn = card.querySelector('.folder-delete-btn');
+
+  // Click to expand/collapse
+  folderHeader.addEventListener('click', () => {
+    toggleFolderExpand(folder.id);
+  });
+
+  // Add action to this folder
+  addActionBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentExpandedFolder = folder.id; // Set context for creation
+    openAddActionModal();
+  });
+
+  // Add subfolder
+  addSubfolderBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    currentExpandedFolder = folder.id; // Set context for creation
+    openAddFolderModal();
+  });
+
+  // Pin/unpin handler
+  pinBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pinAction(folder.id); // Reuse same function
+  });
+
+  // Delete folder handler
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteAction(folder.id); // Reuse same function (it has folder validation)
+  });
+
+  return card;
+}
+
+function createActionCard(action, level = 0, breadcrumbHtml = '') {
   const card = document.createElement('div');
   card.className = 'action-card';
   card.dataset.actionId = action.id;
+  card.dataset.level = level;
 
   // Check if this action is expanded
   if (expandedActions.has(action.id)) {
     card.classList.add('expanded');
   }
 
+  const hasUrl = action.url && action.url.trim();
+  const hasPath = action.path && action.path.trim();
+
   card.innerHTML = `
+    ${breadcrumbHtml ? breadcrumbHtml : ''}
     <div class="action-header">
       <div class="action-content">
         <div class="action-title">${escapeHtml(action.title)}</div>
       </div>
       <div class="action-buttons">
+        <button class="action-save-btn" aria-label="Save changes" title="Save">
+          <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-save"/></svg>
+        </button>
         <button class="action-pin-btn${action.pinned ? ' pinned' : ''}" aria-label="${action.pinned ? 'Unpin' : 'Pin to top'}" title="${action.pinned ? 'Unpin' : 'Pin to top'}">
           <svg class="icon" width="14" height="14" aria-hidden="true"><use href="#icon-pin"/></svg>
         </button>
-        ${action.url ? '<button class="action-open-btn">Open</button>' : ''}
+        ${hasUrl || hasPath ? '<button class="action-open-btn">Open</button>' : ''}
         <button class="action-delete-btn" aria-label="Delete action" title="Delete action">
           <svg class="icon" width="13" height="13" aria-hidden="true"><use href="#icon-x"/></svg>
         </button>
@@ -982,8 +1246,19 @@ function createActionCard(action) {
     </div>
     <div class="action-details">
       <div class="form-group">
-        <label>URL</label>
+        <label>
+          <svg class="icon field-icon" width="12" height="12" aria-hidden="true"><use href="#icon-link"/></svg>
+          URL
+        </label>
         <input type="url" class="action-url-input" placeholder="https://..." value="${escapeHtml(action.url || '')}">
+      </div>
+      <div class="form-group">
+        <label>
+          <svg class="icon field-icon" width="12" height="12" aria-hidden="true"><use href="#icon-file"/></svg>
+          File Path
+        </label>
+        <input type="text" class="action-path-input" placeholder="C:\\Users\\..." value="${escapeHtml(action.path || '')}">
+        <span class="path-validation-msg"></span>
       </div>
       <div class="form-group">
         <label>Note</label>
@@ -993,18 +1268,48 @@ function createActionCard(action) {
   `;
 
   // Add event listeners (not using onclick to properly handle events)
-  const pinBtn   = card.querySelector('.action-pin-btn');
+  const saveBtn = card.querySelector('.action-save-btn');
+  const pinBtn = card.querySelector('.action-pin-btn');
   const openBtn = card.querySelector('.action-open-btn');
   const deleteBtn = card.querySelector('.action-delete-btn');
   const noteArea = card.querySelector('.action-note');
   const urlInput = card.querySelector('.action-url-input');
+  const pathInput = card.querySelector('.action-path-input');
+  const pathValidationMsg = card.querySelector('.path-validation-msg');
   const actionHeader = card.querySelector('.action-header');
 
   // Click anywhere on card header to expand/collapse
   actionHeader.addEventListener('click', (e) => {
-    // Only expand if not clicking on a button
-    if (!e.target.closest('button')) {
+    // Only expand if not clicking on a button or breadcrumb
+    if (!e.target.closest('button') && !e.target.closest('.item-breadcrumb')) {
       toggleActionExpand(action.id, card);
+    }
+  });
+
+  // Save button - manually save all fields immediately
+  saveBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+
+    // Save all fields immediately (bypass debounce)
+    action.url = urlInput.value.trim();
+    action.path = pathInput.value.trim();
+    action.note = noteArea.value.trim();
+
+    const result = await window.electronAPI.saveActions(actions);
+
+    // Visual feedback
+    if (result.success) {
+      saveBtn.style.color = '#10b981'; // Green
+      saveBtn.style.transform = 'scale(1.1)';
+      setTimeout(() => {
+        saveBtn.style.color = '';
+        saveBtn.style.transform = '';
+      }, 500);
+    } else {
+      saveBtn.style.color = '#ef4444'; // Red
+      setTimeout(() => {
+        saveBtn.style.color = '';
+      }, 1000);
     }
   });
 
@@ -1014,13 +1319,17 @@ function createActionCard(action) {
     pinAction(action.id);
   });
 
-  // Open action handler - get current URL from input
+  // Open action handler - handles both URL and path
   if (openBtn) {
     openBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       const currentUrl = urlInput.value.trim();
+      const currentPath = pathInput.value.trim();
+
       if (currentUrl) {
         openAction(currentUrl);
+      } else if (currentPath) {
+        openAction(currentPath);
       }
     });
   }
@@ -1031,13 +1340,71 @@ function createActionCard(action) {
     deleteAction(action.id);
   });
 
+  // URL/Path mutual exclusivity
+  urlInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    if (e.target.value.trim()) {
+      pathInput.disabled = true;
+    } else {
+      pathInput.disabled = false;
+    }
+  });
+
+  pathInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+    if (e.target.value.trim()) {
+      urlInput.disabled = true;
+    } else {
+      urlInput.disabled = false;
+    }
+  });
+
+  // Set initial disabled state
+  if (urlInput.value.trim()) {
+    pathInput.disabled = true;
+  } else if (pathInput.value.trim()) {
+    urlInput.disabled = true;
+  }
+
   // Save URL on change (debounced)
   let urlTimeout;
   urlInput.addEventListener('input', (e) => {
     e.stopPropagation();
     clearTimeout(urlTimeout);
     urlTimeout = setTimeout(() => {
-      saveActionUrl(action.id, e.target.value);
+      saveActionField(action.id, 'url', e.target.value);
+    }, 1000);
+  });
+
+  // Save path on change (debounced) with validation
+  let pathTimeout;
+  pathInput.addEventListener('input', (e) => {
+    e.stopPropagation();
+
+    // Strip quotes from pasted paths (Windows File Explorer adds quotes)
+    let pathValue = e.target.value.trim();
+    if ((pathValue.startsWith('"') && pathValue.endsWith('"')) ||
+        (pathValue.startsWith("'") && pathValue.endsWith("'"))) {
+      pathValue = pathValue.slice(1, -1);
+      e.target.value = pathValue;
+    }
+
+    clearTimeout(pathTimeout);
+    pathTimeout = setTimeout(async () => {
+      saveActionField(action.id, 'path', pathValue);
+
+      // Validate path if not empty
+      if (pathValue) {
+        const validation = await window.electronAPI.validatePath(pathValue);
+        if (validation.success && !validation.exists) {
+          pathValidationMsg.textContent = '⚠ Path does not exist';
+          pathValidationMsg.style.color = '#f59e0b';
+        } else {
+          pathValidationMsg.textContent = '';
+        }
+      } else {
+        pathValidationMsg.textContent = '';
+      }
     }, 1000);
   });
 
@@ -1047,7 +1414,7 @@ function createActionCard(action) {
     e.stopPropagation();
     clearTimeout(noteTimeout);
     noteTimeout = setTimeout(() => {
-      saveActionNote(action.id, e.target.value);
+      saveActionField(action.id, 'note', e.target.value);
     }, 1000);
   });
 
@@ -1058,8 +1425,17 @@ function openAddActionModal() {
   document.getElementById('action-modal').classList.remove('hidden');
   document.getElementById('action-title-input').value = '';
   document.getElementById('action-url-input').value = '';
+  document.getElementById('action-path-input').value = '';
   const noteInput = document.getElementById('action-note-input');
   if (noteInput) noteInput.value = '';
+
+  // Re-enable both fields
+  document.getElementById('action-url-input').disabled = false;
+  document.getElementById('action-path-input').disabled = false;
+  document.getElementById('action-url-input').placeholder = 'https://...';
+  document.getElementById('action-path-input').placeholder = 'C:\\Users\\...';
+  document.getElementById('path-validation-msg').textContent = '';
+
   document.getElementById('action-title-input').focus();
 }
 
@@ -1072,6 +1448,7 @@ async function handleAddAction(e) {
 
   const title = document.getElementById('action-title-input').value.trim();
   const url = document.getElementById('action-url-input').value.trim();
+  const path = document.getElementById('action-path-input').value.trim();
   const note = document.getElementById('action-note-input')?.value.trim() || '';
 
   if (!title) {
@@ -1079,8 +1456,11 @@ async function handleAddAction(e) {
     return;
   }
 
+  // Smart creation: use currentExpandedFolder if available
+  const parentId = currentExpandedFolder;
+
   try {
-    const result = await window.electronAPI.addAction({ title, url, note });
+    const result = await window.electronAPI.addAction({ title, url, path, note, parentId });
 
     if (result.success) {
       actions.push(result.action);
@@ -1094,30 +1474,90 @@ async function handleAddAction(e) {
   }
 }
 
+function openAddFolderModal() {
+  const modal = document.getElementById('folder-modal');
+  const input = document.getElementById('folder-title-input');
+
+  modal.classList.remove('hidden');
+  input.value = '';
+
+  // Delay focus slightly to ensure modal is fully rendered
+  setTimeout(() => {
+    input.focus();
+  }, 100);
+}
+
+function closeAddFolderModal() {
+  document.getElementById('folder-modal').classList.add('hidden');
+}
+
+async function handleAddFolder(e) {
+  e.preventDefault();
+
+  const title = document.getElementById('folder-title-input').value.trim();
+
+  if (!title) {
+    alert('Please enter a folder name');
+    return;
+  }
+
+  // Smart creation: use currentExpandedFolder if available
+  const parentId = currentExpandedFolder;
+
+  try {
+    const result = await window.electronAPI.addFolder({ title, parentId });
+
+    if (result.success) {
+      actions.push(result.folder);
+      displayActions();
+      closeAddFolderModal();
+    } else {
+      alert('Error creating folder: ' + result.error);
+    }
+  } catch (error) {
+    alert('Error: ' + error.message);
+  }
+}
+
 async function deleteAction(actionId) {
-  if (!confirm('Delete this action?')) return;
+  const item = actions.find(a => a.id === actionId);
+  const itemType = item?.type === 'folder' ? 'folder' : 'action';
+
+  if (!confirm(`Delete this ${itemType}?`)) return;
 
   try {
     const result = await window.electronAPI.deleteAction(actionId);
 
     if (result.success) {
-      // Remove from expanded set
+      // Clean up expanded state
       expandedActions.delete(actionId);
+      expandedFolders.delete(actionId);
+
+      // Clear currentExpandedFolder if we're deleting it
+      if (currentExpandedFolder === actionId) {
+        currentExpandedFolder = null;
+      }
+
       // Remove from actions array
       actions = actions.filter(a => a.id !== actionId);
+
       // Re-render the list
       displayActions();
     } else {
-      alert('Error deleting action: ' + result.error);
+      alert(`Error deleting ${itemType}: ` + result.error);
     }
   } catch (error) {
-    console.error('Error deleting action:', error);
+    console.error(`Error deleting ${itemType}:`, error);
     alert('Error: ' + error.message);
   }
 }
 
 function openAction(url) {
-  window.electronAPI.openExternal(url);
+  if (!url || !url.trim()) {
+    alert('No URL or path specified for this action');
+    return;
+  }
+  window.electronAPI.openExternal(url.trim());
 }
 
 // Toggle action card expand/collapse
@@ -1129,6 +1569,29 @@ function toggleActionExpand(actionId, cardElement) {
     expandedActions.add(actionId);
     cardElement.classList.add('expanded');
   }
+}
+
+// Toggle folder expand/collapse
+function toggleFolderExpand(folderId) {
+  if (expandedFolders.has(folderId)) {
+    expandedFolders.delete(folderId);
+    // If closing the current expanded folder, clear it
+    if (currentExpandedFolder === folderId) {
+      currentExpandedFolder = null;
+    }
+  } else {
+    expandedFolders.add(folderId);
+    // Set as current expanded folder for smart creation
+    currentExpandedFolder = folderId;
+  }
+
+  // Re-render to show/hide children
+  displayActions();
+}
+
+// Clear currentExpandedFolder when creating at root level
+function clearExpandedFolderContext() {
+  currentExpandedFolder = null;
 }
 
 // Pin / unpin action and re-sort
@@ -1155,48 +1618,71 @@ async function pinAction(actionId) {
   displayActions();
 }
 
-// Save action note
-async function saveActionNote(actionId, note) {
+// Save action field (unified function for url, path, note)
+async function saveActionField(actionId, field, value) {
   try {
     // Find the action in the array
     const action = actions.find(a => a.id === actionId);
     if (!action) return;
 
-    // Update the note
-    action.note = note;
+    // Update the field
+    action[field] = value;
 
     // Save to backend
     const result = await window.electronAPI.saveActions(actions);
 
     if (!result.success) {
-      console.error('Error saving action note:', result.error);
+      console.error(`Error saving action ${field}:`, result.error);
+    }
+
+    // Update Open button visibility without full re-render
+    if (field === 'url' || field === 'path') {
+      updateOpenButtonVisibility(actionId);
     }
   } catch (error) {
-    console.error('Error saving action note:', error);
+    console.error(`Error saving action ${field}:`, error);
   }
 }
 
-// Save action URL
-async function saveActionUrl(actionId, url) {
-  try {
-    // Find the action in the array
-    const action = actions.find(a => a.id === actionId);
-    if (!action) return;
+// Update Open button visibility for a specific action without re-rendering
+function updateOpenButtonVisibility(actionId) {
+  const action = actions.find(a => a.id === actionId);
+  if (!action) return;
 
-    // Update the URL
-    action.url = url;
+  const card = document.querySelector(`.action-card[data-action-id="${actionId}"]`);
+  if (!card) return;
 
-    // Save to backend
-    const result = await window.electronAPI.saveActions(actions);
+  const hasUrl = action.url && action.url.trim();
+  const hasPath = action.path && action.path.trim();
+  const openBtn = card.querySelector('.action-open-btn');
 
-    if (!result.success) {
-      console.error('Error saving action URL:', result.error);
+  if (hasUrl || hasPath) {
+    if (!openBtn) {
+      // Create Open button if it doesn't exist
+      const newBtn = document.createElement('button');
+      newBtn.className = 'action-open-btn';
+      newBtn.textContent = 'Open';
+      const actionButtons = card.querySelector('.action-buttons');
+      const pinBtn = actionButtons.querySelector('.action-pin-btn');
+      actionButtons.insertBefore(newBtn, pinBtn.nextSibling);
+
+      // Add click handler
+      newBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentUrl = card.querySelector('.action-url-input').value.trim();
+        const currentPath = card.querySelector('.action-path-input').value.trim();
+        if (currentUrl) {
+          openAction(currentUrl);
+        } else if (currentPath) {
+          openAction(currentPath);
+        }
+      });
     }
-
-    // Update the Open button visibility
-    displayActions();
-  } catch (error) {
-    console.error('Error saving action URL:', error);
+  } else {
+    // Remove Open button if URL and path are both empty
+    if (openBtn) {
+      openBtn.remove();
+    }
   }
 }
 

@@ -45,6 +45,10 @@ function createWindow() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// APP LIFECYCLE
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -135,21 +139,63 @@ ipcMain.handle('close-window', () => {
   }
 });
 
-ipcMain.handle('open-external', (event, url) => {
-  shell.openExternal(url);
+ipcMain.handle('open-external', async (event, urlOrPath) => {
+  try {
+    // Detect if it's a file path (contains backslash or starts with a drive letter)
+    const isFilePath = urlOrPath.includes('\\') || urlOrPath.includes('/') && !urlOrPath.startsWith('http');
+
+    if (isFilePath) {
+      // Use shell.openPath for file paths (opens in default app)
+      await shell.openPath(urlOrPath);
+    } else {
+      // Use shell.openExternal for URLs
+      await shell.openExternal(urlOrPath);
+    }
+  } catch (error) {
+    console.error('Error opening:', error);
+  }
 });
 
 ipcMain.handle('get-notes-directory', () => {
   return path.join(app.getPath('userData'), 'meeting-notes');
 });
 
-// Actions CRUD handlers
-ipcMain.handle('get-actions', async () => {
+// ══════════════════════════════════════════════════════════════════════════════
+// ACTIONS API - Shared Business Logic
+// ══════════════════════════════════════════════════════════════════════════════
+// These functions contain the actual logic for managing actions.json
+// They are called by both IPC handlers and the HTTP REST API.
+
+async function apiGetActions() {
   try {
     const actionsFile = path.join(app.getPath('userData'), 'actions.json');
     try {
       const data = await fs.readFile(actionsFile, 'utf-8');
-      return { success: true, actions: JSON.parse(data) };
+      let actions = JSON.parse(data);
+
+      // MIGRATION: Add type field to existing actions that don't have it
+      let needsSave = false;
+      actions = actions.map(item => {
+        if (!item.type) {
+          needsSave = true;
+          return {
+            ...item,
+            type: 'action',
+            parentId: item.parentId || null,
+            path: item.path || '',
+            createdAt: item.createdAt || new Date().toISOString()
+          };
+        }
+        return item;
+      });
+
+      // Save migrated data back to disk
+      if (needsSave) {
+        await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
+        console.log('Migrated actions to new format with type field');
+      }
+
+      return { success: true, actions };
     } catch (err) {
       if (err.code === 'ENOENT') {
         // File doesn't exist yet — first run, return empty array
@@ -161,9 +207,9 @@ ipcMain.handle('get-actions', async () => {
   } catch (error) {
     return { success: false, error: error.message };
   }
-});
+}
 
-ipcMain.handle('save-actions', async (event, actions) => {
+async function apiSaveActions(actions) {
   try {
     const actionsFile = path.join(app.getPath('userData'), 'actions.json');
     await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
@@ -171,9 +217,9 @@ ipcMain.handle('save-actions', async (event, actions) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
-});
+}
 
-ipcMain.handle('add-action', async (event, action) => {
+async function apiAddAction(action) {
   try {
     const actionsFile = path.join(app.getPath('userData'), 'actions.json');
     let actions = [];
@@ -188,10 +234,13 @@ ipcMain.handle('add-action', async (event, action) => {
     // Add new action with timestamp ID
     const newAction = {
       id: Date.now().toString(),
+      type: 'action',
       title: action.title || '',
       url: action.url || '',
+      path: action.path || '',
       note: action.note || '',
       pinned: false,
+      parentId: action.parentId || null,
       createdAt: new Date().toISOString()
     };
 
@@ -202,13 +251,58 @@ ipcMain.handle('add-action', async (event, action) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
-});
+}
 
-ipcMain.handle('delete-action', async (event, actionId) => {
+async function apiAddFolder(folder) {
+  try {
+    const actionsFile = path.join(app.getPath('userData'), 'actions.json');
+    let actions = [];
+
+    try {
+      const data = await fs.readFile(actionsFile, 'utf-8');
+      actions = JSON.parse(data);
+    } catch (err) {
+      // File doesn't exist, start with empty array
+    }
+
+    // Add new folder with timestamp ID
+    const newFolder = {
+      id: Date.now().toString(),
+      type: 'folder',
+      title: folder.title || '',
+      pinned: false,
+      parentId: folder.parentId || null,
+      createdAt: new Date().toISOString()
+    };
+
+    actions.push(newFolder);
+    await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
+
+    return { success: true, folder: newFolder };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function apiDeleteAction(actionId) {
   try {
     const actionsFile = path.join(app.getPath('userData'), 'actions.json');
     const data = await fs.readFile(actionsFile, 'utf-8');
     let actions = JSON.parse(data);
+
+    // Find the item to delete
+    const itemToDelete = actions.find(a => a.id === actionId);
+
+    // If it's a folder, check if it has children
+    if (itemToDelete && itemToDelete.type === 'folder') {
+      const hasChildren = actions.some(a => a.parentId === actionId);
+      if (hasChildren) {
+        return {
+          success: false,
+          error: 'Folder is not empty. Please remove or move all items before deleting this folder.'
+        };
+      }
+    }
 
     actions = actions.filter(a => a.id !== actionId);
     await fs.writeFile(actionsFile, JSON.stringify(actions, null, 2), 'utf-8');
@@ -217,7 +311,25 @@ ipcMain.handle('delete-action', async (event, actionId) => {
   } catch (error) {
     return { success: false, error: error.message };
   }
-});
+}
+
+async function apiValidatePath(filePath) {
+  try {
+    const fsSync = require('fs');
+    const exists = fsSync.existsSync(filePath);
+    return { success: true, exists };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+}
+
+// Actions CRUD handlers (IPC) - delegate to shared API functions
+ipcMain.handle('get-actions', async () => apiGetActions());
+ipcMain.handle('save-actions', async (event, actions) => apiSaveActions(actions));
+ipcMain.handle('add-action', async (event, action) => apiAddAction(action));
+ipcMain.handle('add-folder', async (event, folder) => apiAddFolder(folder));
+ipcMain.handle('delete-action', async (event, actionId) => apiDeleteAction(actionId));
+ipcMain.handle('validate-path', async (event, filePath) => apiValidatePath(filePath));
 
 // ── Fast-startup handlers ─────────────────────────────────────────────────────
 

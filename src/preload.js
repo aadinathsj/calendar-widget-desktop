@@ -14,7 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getActions: () => ipcRenderer.invoke('get-actions'),
   saveActions: (actions) => ipcRenderer.invoke('save-actions', actions),
   addAction: (action) => ipcRenderer.invoke('add-action', action),
+  addFolder: (folder) => ipcRenderer.invoke('add-folder', folder),
   deleteAction: (actionId) => ipcRenderer.invoke('delete-action', actionId),
+  validatePath: (filePath) => ipcRenderer.invoke('validate-path', filePath),
 
   // Fast-startup APIs
   checkAndGetEvents: (startDate, endDate) => ipcRenderer.invoke('check-and-get-events', startDate, endDate),
