@@ -25,12 +25,25 @@ function createWindow() {
     alwaysOnTop: false,
     skipTaskbar: false,
     resizable: false,
+    focusable: true,
     icon: iconExists ? iconPath : undefined,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
+  });
+
+  // Ensure the window doesn't steal focus from other applications
+  mainWindow.on('focus', () => {
+    // Allow focus but don't force it to stay on top
+    mainWindow.setAlwaysOnTop(false);
+  });
+
+  // Properly blur when clicking outside
+  mainWindow.on('blur', () => {
+    // Don't steal focus back when user clicks outside
+    mainWindow.setAlwaysOnTop(false);
   });
 
   // Show window immediately, even before content loads

@@ -28,23 +28,108 @@ let countdownInterval = null;
 // Week view state
 let currentWeekStart = null; // Will be set to Monday of current week
 let highlightEventAtHour = null; // Hour to highlight when navigating from heatmap
+let highlightAppliedAt = null; // Timestamp when highlight was first applied
+let highlightTimeout = null; // Pending timeout for applying highlight
 
 // Theme state
 let currentTheme = 'ocean-blue';
+
+// Tab order state
+let tabOrder = ['calendar', 'weekview', 'actions'];
+
+// ===== SESSION CACHE (in-memory) =====
+// Keeps events in memory for the entire session - avoids redundant Outlook queries
+const sessionCache = {
+  events: new Map(), // Key: 'YYYY-MM-DD', Value: { events: [...], timestamp: Date }
+  lastOutlookSync: null, // Last time we queried Outlook
+  CACHE_TTL: 15 * 60 * 1000, // 15 minutes - only re-query Outlook if older than this
+  weekViewLoaded: false, // Lazy load flag for week view
+
+  set(dateKey, events) {
+    this.events.set(dateKey, {
+      events: events,
+      timestamp: Date.now()
+    });
+  },
+
+  get(dateKey) {
+    return this.events.get(dateKey);
+  },
+
+  has(dateKey) {
+    return this.events.has(dateKey);
+  },
+
+  isStale(dateKey) {
+    const cached = this.get(dateKey);
+    if (!cached) return true;
+    return (Date.now() - cached.timestamp) > this.CACHE_TTL;
+  },
+
+  shouldSyncOutlook() {
+    if (!this.lastOutlookSync) return true;
+    return (Date.now() - this.lastOutlookSync) > this.CACHE_TTL;
+  },
+
+  markOutlookSynced() {
+    this.lastOutlookSync = Date.now();
+  },
+
+  clear() {
+    this.events.clear();
+    this.lastOutlookSync = null;
+  }
+};
 
 // Initialize the app
 async function init() {
   // Load saved theme first
   loadTheme();
+  // Restore tab order before rendering (reorders DOM nodes)
+  loadTabOrder();
 
   // Setup listeners synchronously (fast)
   setupEventListeners();
   setupKeyboardNavigation();
   setupScrollDetection();
   setupAutoSave();
+  setupFocusManagement();
+  // Enable drag-to-reorder for tab buttons
+  initTabDragAndDrop();
 
   // Don't await - let it run in background
   fastStartup();
+}
+
+// ===== FOCUS MANAGEMENT =====
+// Prevent focus capture issues that can interfere with other applications
+function setupFocusManagement() {
+  // Release focus from any contentEditable elements when clicking outside the widget
+  document.addEventListener('blur', () => {
+    // Find any active contentEditable elements
+    const editingElements = document.querySelectorAll('[contenteditable="true"]');
+    editingElements.forEach(el => {
+      // Trigger blur to save/cancel editing
+      el.blur();
+    });
+  });
+
+  // Also handle when the entire window loses focus
+  window.addEventListener('blur', () => {
+    // Cancel any ongoing inline edits
+    const editingElements = document.querySelectorAll('.editing');
+    editingElements.forEach(el => {
+      if (el.contentEditable === 'true') {
+        // Restore original text if available
+        if (el.dataset.originalText) {
+          el.textContent = el.dataset.originalText;
+        }
+        el.contentEditable = false;
+        el.classList.remove('editing');
+        delete el.dataset.originalText;
+      }
+    });
+  });
 }
 
 // ── Fast startup helpers ────────────────────────────────────────────────────
@@ -70,34 +155,64 @@ async function fastStartup() {
   const dateKey = formatDateKey(currentDate);
   const eventsList = document.getElementById('events-list');
 
-  // Show loading state immediately
-  eventsList.innerHTML = '<div class="no-events">Loading events…</div>';
+  // Priority 1: Check session cache (fastest - already in memory)
+  if (sessionCache.has(dateKey)) {
+    const cached = sessionCache.get(dateKey);
+    displayEvents(cached.events);
+    console.log(`✓ Instant display from session cache`);
 
-  // Try cache first (synchronous fast path)
+    // Only refresh from Outlook if cache is stale
+    if (!sessionCache.isStale(dateKey)) {
+      console.log(`✓ Cache is fresh (< 15 min), skipping Outlook query`);
+      // Still pre-fetch surrounding days in background if we haven't synced recently
+      if (sessionCache.shouldSyncOutlook()) {
+        setTimeout(() => backgroundPrefetchRange(currentDate), 2000);
+      }
+      return;
+    }
+  }
+
+  // Priority 2: Try disk cache (fast - no Outlook query needed)
   let hasCacheForToday = false;
   try {
     const cacheResult = await window.electronAPI.getCachedEvents(dateKey);
     if (cacheResult.success && Array.isArray(cacheResult.events) && cacheResult.fromCache) {
       displayEvents(cacheResult.events);
+      sessionCache.set(dateKey, cacheResult.events);
       hasCacheForToday = true;
+      console.log(`✓ Fast display from disk cache`);
+    } else {
+      eventsList.innerHTML = '<div class="no-events">Loading events…</div>';
     }
   } catch (error) {
     console.error('Cache read error:', error);
+    eventsList.innerHTML = '<div class="no-events">Loading events…</div>';
   }
 
-  // Load actions in parallel (don't block event display)
+  // Load actions synchronously from disk (instant, no IPC delay)
+  loadActionsSync();
+
+  // Priority 3: Background refresh from Outlook (only if cache is stale or missing)
+  if (!hasCacheForToday || sessionCache.shouldSyncOutlook()) {
+    backgroundRefresh(dateKey, hasCacheForToday);
+  } else {
+    console.log(`✓ Skipping Outlook sync - cache is fresh`);
+  }
+}
+
+// Synchronous actions load (non-blocking)
+function loadActionsSync() {
   window.electronAPI.getActions().then(actionsResult => {
     if (actionsResult.success) {
       actions = actionsResult.actions;
+      console.log(`✓ Actions loaded (${actions.length} items)`);
     }
   }).catch(err => console.error('Actions load error:', err));
-
-  // Background: refresh today, then pre-fetch surrounding days
-  backgroundRefresh(dateKey, hasCacheForToday);
 }
 
 async function backgroundRefresh(dateKey, hasCachedData) {
   setRefreshSpinning(true);
+  console.log(`⟳ Syncing with Outlook...`);
 
   const startDate = new Date(currentDate);
   startDate.setHours(0, 0, 0, 0);
@@ -108,12 +223,30 @@ async function backgroundRefresh(dateKey, hasCachedData) {
     const result = await window.electronAPI.checkAndGetEvents(startDate, endDate);
 
     if (result.success && result.available) {
-      displayEvents(result.events);
-      // Cache today's fresh data
+      // Preserve highlight state before rebuilding DOM
+      const shouldHighlight = highlightEventAtHour !== null;
+      const highlightHour = highlightEventAtHour;
+
+      // Update session cache
+      sessionCache.set(dateKey, result.events);
+      sessionCache.markOutlookSynced();
+
+      // Cache to disk
       window.electronAPI.saveEventsCache(result.events, dateKey);
 
-      // Pre-fetch surrounding ±5 days in background (non-blocking)
-      backgroundPrefetchRange(currentDate);
+      // Only update display if we're still on the calendar tab and same date
+      if (currentTab === 'calendar' && formatDateKey(currentDate) === dateKey) {
+        // Restore highlight state if it was set
+        if (shouldHighlight) {
+          highlightEventAtHour = highlightHour;
+        }
+        displayEvents(result.events);
+      }
+
+      console.log(`✓ Outlook sync complete`);
+
+      // Pre-fetch surrounding days in background (non-blocking, delayed)
+      setTimeout(() => backgroundPrefetchRange(currentDate), 1000);
     } else if (!result.available) {
       if (!hasCachedData) {
         document.getElementById('events-list').innerHTML =
@@ -138,7 +271,7 @@ async function backgroundRefresh(dateKey, hasCachedData) {
 // Pre-fetch events for ±5 days + next 2 weeks around the given center date (runs in background)
 async function backgroundPrefetchRange(centerDate) {
   try {
-    console.log('Pre-fetching current week + next 2 weeks for instant navigation...');
+    console.log('⟳ Pre-fetching 3 weeks of events...');
 
     const rangeStart = new Date(centerDate);
     rangeStart.setDate(rangeStart.getDate() - 5);
@@ -165,9 +298,16 @@ async function backgroundPrefetchRange(centerDate) {
         eventsMap[key].push(event);
       });
 
-      // Save to cache (fire-and-forget)
+      // Update session cache for all fetched dates
+      Object.keys(eventsMap).forEach(dateKey => {
+        sessionCache.set(dateKey, eventsMap[dateKey]);
+      });
+
+      // Save to disk cache (fire-and-forget)
       await window.electronAPI.saveEventsRangeCache(eventsMap);
-      console.log(`Cached ${Object.keys(eventsMap).length} days for instant navigation`);
+
+      console.log(`✓ Pre-fetched ${Object.keys(eventsMap).length} days`);
+      sessionCache.markOutlookSynced();
     }
   } catch (error) {
     console.error('Background pre-fetch error (non-critical):', error);
@@ -194,11 +334,21 @@ function setupEventListeners() {
 
   // Date navigation
   document.getElementById('prev-day').addEventListener('click', () => {
+    // Clear any active highlight when manually navigating
+    if (highlightTimeout) clearTimeout(highlightTimeout);
+    highlightEventAtHour = null;
+    highlightAppliedAt = null;
+    highlightTimeout = null;
     currentDate.setDate(currentDate.getDate() - 1);
     loadEvents();
   });
 
   document.getElementById('next-day').addEventListener('click', () => {
+    // Clear any active highlight when manually navigating
+    if (highlightTimeout) clearTimeout(highlightTimeout);
+    highlightEventAtHour = null;
+    highlightAppliedAt = null;
+    highlightTimeout = null;
     currentDate.setDate(currentDate.getDate() + 1);
     loadEvents();
   });
@@ -207,11 +357,14 @@ function setupEventListeners() {
     setRefreshSpinning(true);
 
     if (currentTab === 'weekview') {
-      // Refresh heatmap
+      // Force refresh: mark cache as stale
+      sessionCache.lastOutlookSync = null;
       await populateHeatmap();
     } else {
-      // Refresh calendar
-      await loadEvents();
+      // Force refresh: mark current date as stale and sync
+      const dateKey = formatDateKey(currentDate);
+      sessionCache.lastOutlookSync = null; // Force Outlook sync
+      await loadEvents(true); // Pass forceRefresh flag
     }
 
     setRefreshSpinning(false);
@@ -304,6 +457,11 @@ function setupEventListeners() {
 
   // Close theme picker when clicking outside
   document.addEventListener('click', (e) => {
+    // Only handle clicks within our window
+    if (!document.hasFocus()) {
+      return;
+    }
+
     const themePicker = document.getElementById('theme-picker');
     const themeBtn = document.getElementById('theme-btn');
     if (!themePicker.contains(e.target) && e.target !== themeBtn && !themeBtn.contains(e.target)) {
@@ -325,6 +483,22 @@ function setupEventListeners() {
 
 function setupKeyboardNavigation() {
   document.addEventListener('keydown', (e) => {
+    // CRITICAL: Only handle keyboard events if the widget window has focus
+    // This prevents interfering with other applications
+    if (!document.hasFocus()) {
+      return;
+    }
+
+    // Don't capture events if user is typing in an input/textarea/contentEditable
+    const activeElement = document.activeElement;
+    if (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.contentEditable === 'true'
+    ) {
+      return;
+    }
+
     // Handle Escape key
     if (e.key === 'Escape') {
       handleEscapeKey();
@@ -627,13 +801,21 @@ function switchTab(tab) {
   if (tab === 'actions') {
     displayActions();
   } else if (tab === 'weekview') {
-    initWeekView();
+    // Lazy load: only initialize week view the first time user opens it
+    if (!sessionCache.weekViewLoaded) {
+      console.log('⟳ First-time week view load...');
+      sessionCache.weekViewLoaded = true;
+      initWeekView();
+    } else {
+      // Just refresh the display with cached data
+      initWeekView();
+    }
   }
 }
 
 // ===== CALENDAR FUNCTIONS =====
 
-async function loadEvents() {
+async function loadEvents(forceRefresh = false) {
   const eventsList = document.getElementById('events-list');
   const dateKey = formatDateKey(currentDate);
 
@@ -641,18 +823,42 @@ async function loadEvents() {
   resetCardSelection();
   updateDateDisplay();
 
-  // Step 1: Check cache first for instant display
-  const cacheResult = await window.electronAPI.getCachedEvents(dateKey);
+  // Step 1: Check session cache first (instant) - unless forcing refresh
+  if (!forceRefresh && sessionCache.has(dateKey)) {
+    const cached = sessionCache.get(dateKey);
+    displayEvents(cached.events);
+    console.log(`✓ Instant load from session (${dateKey})`);
 
-  if (cacheResult.success && Array.isArray(cacheResult.events) && cacheResult.fromCache) {
-    // Show cached data instantly
-    displayEvents(cacheResult.events);
-  } else {
-    // No cache, show loading
-    eventsList.innerHTML = '<div class="no-events">Loading events...</div>';
+    // Only refresh if stale
+    if (!sessionCache.isStale(dateKey)) {
+      return; // Fresh enough, no need to query Outlook
+    }
   }
 
-  // Step 2: Always refresh from Outlook in background for latest data
+  // Step 2: Check disk cache (fast) - unless forcing refresh
+  if (!forceRefresh) {
+    const cacheResult = await window.electronAPI.getCachedEvents(dateKey);
+
+    if (cacheResult.success && Array.isArray(cacheResult.events) && cacheResult.fromCache) {
+      // Show cached data instantly
+      displayEvents(cacheResult.events);
+      sessionCache.set(dateKey, cacheResult.events);
+      console.log(`✓ Fast load from disk (${dateKey})`);
+
+      // Only refresh if session cache says we should sync
+      if (!sessionCache.shouldSyncOutlook()) {
+        return;
+      }
+    } else {
+      // No cache, show loading
+      eventsList.innerHTML = '<div class="no-events">Loading events...</div>';
+    }
+  } else {
+    // Force refresh: show loading immediately
+    eventsList.innerHTML = '<div class="no-events">Refreshing...</div>';
+  }
+
+  // Step 3: Refresh from Outlook (only if cache is stale or missing)
   const startDate = new Date(currentDate);
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date(currentDate);
@@ -664,8 +870,15 @@ async function loadEvents() {
 
     if (result.success) {
       displayEvents(result.events);
-      // Update cache with fresh data
+
+      // Update session cache
+      sessionCache.set(dateKey, result.events);
+      sessionCache.markOutlookSynced();
+
+      // Update disk cache
       window.electronAPI.saveEventsCache(result.events, dateKey);
+
+      console.log(`✓ Outlook sync (${dateKey})`);
     } else {
       // Only show error if we didn't have cached data
       if (!cacheResult.fromCache) {
@@ -688,7 +901,10 @@ function displayEvents(events) {
   if (events.length === 0) {
     eventsList.innerHTML = '<div class="no-events">No meetings scheduled for this day</div>';
     resetCardSelection();
+    if (highlightTimeout) clearTimeout(highlightTimeout);
     highlightEventAtHour = null; // Clear highlight target
+    highlightAppliedAt = null;
+    highlightTimeout = null;
     return;
   }
 
@@ -710,10 +926,36 @@ function displayEvents(events) {
 
   // Apply highlight if navigating from heatmap
   if (highlightEventAtHour !== null) {
-    setTimeout(() => {
+    // Clear any pending highlight timeout to avoid applying to stale DOM
+    if (highlightTimeout) {
+      console.log(`🔄 Clearing pending highlight timeout (DOM rebuild)`);
+      clearTimeout(highlightTimeout);
+    }
+
+    const isFirstApplication = highlightAppliedAt === null;
+    const delay = isFirstApplication ? 200 : 0; // No delay for re-applications (from backgroundRefresh)
+
+    console.log(`✨ Scheduling highlight for hour ${highlightEventAtHour} (delay: ${delay}ms, first: ${isFirstApplication})`);
+
+    highlightTimeout = setTimeout(() => {
+      highlightTimeout = null; // Clear the timeout reference
+
+      if (isFirstApplication) {
+        highlightAppliedAt = Date.now();
+      }
+
+      console.log(`🎯 Applying highlight to hour ${highlightEventAtHour}`);
       applyEventHighlight(highlightEventAtHour);
-      highlightEventAtHour = null; // Clear after applying
-    }, 200);
+
+      // Clear highlight state after 5s (measured from first application)
+      if (isFirstApplication) {
+        setTimeout(() => {
+          console.log(`⏰ Clearing highlight state after 5s`);
+          highlightEventAtHour = null;
+          highlightAppliedAt = null;
+        }, 5000);
+      }
+    }, delay);
   }
 }
 
@@ -1172,14 +1414,24 @@ function createFolderCard(folder, level = 0, breadcrumbHtml = '') {
 
   // Add event listeners
   const folderHeader = card.querySelector('.folder-header-content');
+  const folderTitle = card.querySelector('.folder-title');
   const addActionBtn = card.querySelector('.folder-add-action-btn');
   const addSubfolderBtn = card.querySelector('.folder-add-subfolder-btn');
   const pinBtn = card.querySelector('.folder-pin-btn');
   const deleteBtn = card.querySelector('.folder-delete-btn');
 
   // Click to expand/collapse
-  folderHeader.addEventListener('click', () => {
-    toggleFolderExpand(folder.id);
+  folderHeader.addEventListener('click', (e) => {
+    // Don't expand if clicking on title or buttons
+    if (!e.target.closest('button') && !e.target.closest('.folder-title')) {
+      toggleFolderExpand(folder.id);
+    }
+  });
+
+  // Double-click title to edit
+  folderTitle.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    makeEditableTitle(folderTitle, folder.id, 'folder');
   });
 
   // Add action to this folder
@@ -1277,13 +1529,20 @@ function createActionCard(action, level = 0, breadcrumbHtml = '') {
   const pathInput = card.querySelector('.action-path-input');
   const pathValidationMsg = card.querySelector('.path-validation-msg');
   const actionHeader = card.querySelector('.action-header');
+  const actionTitle = card.querySelector('.action-title');
 
   // Click anywhere on card header to expand/collapse
   actionHeader.addEventListener('click', (e) => {
     // Only expand if not clicking on a button or breadcrumb
-    if (!e.target.closest('button') && !e.target.closest('.item-breadcrumb')) {
+    if (!e.target.closest('button') && !e.target.closest('.item-breadcrumb') && !e.target.closest('.action-title')) {
       toggleActionExpand(action.id, card);
     }
+  });
+
+  // Double-click title to edit
+  actionTitle.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    makeEditableTitle(actionTitle, action.id, 'action');
   });
 
   // Save button - manually save all fields immediately
@@ -1644,6 +1903,123 @@ async function saveActionField(actionId, field, value) {
   }
 }
 
+// Make title editable inline (for both actions and folders)
+function makeEditableTitle(titleElement, itemId, itemType) {
+  const originalText = titleElement.textContent.trim();
+
+  // Store original for cancel
+  titleElement.dataset.originalText = originalText;
+
+  // Make editable
+  titleElement.contentEditable = true;
+  titleElement.classList.add('editing');
+  titleElement.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(titleElement);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  // Save handler
+  const saveEdit = async () => {
+    const newText = titleElement.textContent.trim();
+
+    // Enforce 50 character limit
+    if (newText.length > 50) {
+      titleElement.textContent = newText.substring(0, 50);
+      return; // Don't save, just truncate
+    }
+
+    if (newText && newText !== originalText) {
+      // Update the item
+      const item = actions.find(a => a.id === itemId);
+      if (item) {
+        item.title = newText;
+
+        // Save to backend
+        try {
+          const result = await window.electronAPI.saveActions(actions);
+          if (!result.success) {
+            console.error('Error saving title:', result.error);
+            titleElement.textContent = originalText; // Revert
+          }
+        } catch (error) {
+          console.error('Error saving title:', error);
+          titleElement.textContent = originalText; // Revert
+        }
+      }
+    } else if (!newText) {
+      // Empty title, revert
+      titleElement.textContent = originalText;
+    }
+
+    // Clean up
+    titleElement.contentEditable = false;
+    titleElement.classList.remove('editing');
+    delete titleElement.dataset.originalText;
+  };
+
+  // Cancel handler
+  const cancelEdit = () => {
+    titleElement.textContent = originalText;
+    titleElement.contentEditable = false;
+    titleElement.classList.remove('editing');
+    delete titleElement.dataset.originalText;
+  };
+
+  // Listen for blur (save)
+  const blurHandler = () => {
+    saveEdit();
+  };
+
+  // Listen for Enter (save) and Escape (cancel)
+  const keyHandler = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEdit();
+    } else if (titleElement.textContent.length >= 50 && e.key !== 'Backspace' && e.key !== 'Delete' && !e.ctrlKey && !e.metaKey) {
+      // Prevent typing beyond 50 characters (allow Ctrl/Cmd shortcuts)
+      e.preventDefault();
+    }
+  };
+
+  // Handle input event to enforce limit on paste
+  const inputHandler = () => {
+    if (titleElement.textContent.length > 50) {
+      const cursorPos = window.getSelection().getRangeAt(0).startOffset;
+      titleElement.textContent = titleElement.textContent.substring(0, 50);
+
+      // Restore cursor position
+      const range = document.createRange();
+      const sel = window.getSelection();
+      try {
+        range.setStart(titleElement.childNodes[0], Math.min(cursorPos, 50));
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch (e) {
+        // Cursor positioning failed, just focus at end
+        titleElement.focus();
+      }
+    }
+  };
+
+  titleElement.addEventListener('blur', blurHandler, { once: true });
+  titleElement.addEventListener('keydown', keyHandler);
+  titleElement.addEventListener('input', inputHandler);
+
+  // Clean up listeners after blur
+  titleElement.addEventListener('blur', () => {
+    titleElement.removeEventListener('keydown', keyHandler);
+    titleElement.removeEventListener('input', inputHandler);
+  }, { once: true });
+}
+
 // Update Open button visibility for a specific action without re-rendering
 function updateOpenButtonVisibility(actionId) {
   const action = actions.find(a => a.id === actionId);
@@ -1840,7 +2216,7 @@ function buildHeatmapGrid() {
   });
 }
 
-// Populate heatmap with meeting data from cache and Outlook
+// Populate heatmap with meeting data from session/disk cache (lazy Outlook query)
 async function populateHeatmap() {
   const days = 7;
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
@@ -1853,138 +2229,121 @@ async function populateHeatmap() {
     }
   });
 
-  // Fetch events for the entire week from Outlook
   const weekStart = new Date(currentWeekStart);
   weekStart.setHours(0, 0, 0, 0);
   const weekEnd = new Date(currentWeekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
   weekEnd.setHours(23, 59, 59, 999);
 
-  // Try to get events from Outlook for this week
-  const result = await window.electronAPI.getEvents(weekStart, weekEnd);
+  // Collect all events for the week from session/disk cache
+  let allEvents = [];
+  let needsOutlookSync = false;
 
-  console.log(`Fetched ${result.events?.length || 0} events for week ${formatDateKey(weekStart)}`);
+  // Check each day in session cache first
+  for (let dayOffset = 0; dayOffset < days; dayOffset++) {
+    const date = new Date(currentWeekStart);
+    date.setDate(date.getDate() + dayOffset);
+    const dateKey = formatDateKey(date);
 
-  // Log each event for debugging
-  if (result.events) {
-    result.events.forEach(evt => {
-      const date = new Date(evt.start);
-      console.log(`  - ${evt.subject} on ${date.toLocaleDateString()} at ${date.toLocaleTimeString()} | Organizer: ${evt.organizer} | Status: ${evt.meetingStatus}/${evt.responseStatus}`);
-    });
-  }
-
-  if (result.success && Array.isArray(result.events)) {
-    // Cache the events by day for faster future access
-    const eventsByDay = {};
-    result.events.forEach(event => {
-      const eventDate = new Date(event.start);
-      const dateKey = formatDateKey(eventDate);
-      if (!eventsByDay[dateKey]) {
-        eventsByDay[dateKey] = [];
+    if (sessionCache.has(dateKey)) {
+      const cached = sessionCache.get(dateKey);
+      allEvents.push(...cached.events);
+      if (sessionCache.isStale(dateKey)) {
+        needsOutlookSync = true;
       }
-      eventsByDay[dateKey].push(event);
-    });
-
-    // Save to cache
-    await window.electronAPI.saveEventsRangeCache(eventsByDay);
-
-    // Process all events
-    result.events.forEach(event => {
-      const startTime = new Date(event.start);
-      const endTime = new Date(event.end);
-      const startHour = startTime.getHours();
-      const endHour = endTime.getHours();
-      const durationMinutes = (endTime - startTime) / 60000;
-
-      // Calculate which day of the week this is
-      const daysDiff = Math.floor((startTime - weekStart) / (1000 * 60 * 60 * 24));
-      if (daysDiff < 0 || daysDiff > 6) return;
-
-      // Mark the hour blocks this meeting occupies (8am-5pm)
-      hours.forEach(hour => {
-        // Check if this hour block overlaps with the meeting
-        // Meeting can start before 8am or end after 5pm, but we only show 8am-5pm blocks
-        const blockStart = new Date(startTime);
-        blockStart.setHours(hour, 0, 0, 0);
-        const blockEnd = new Date(blockStart);
-        blockEnd.setHours(hour + 1, 0, 0, 0);
-
-        // Check if meeting overlaps with this hour block
-        const meetingOverlapsBlock = startTime < blockEnd && endTime > blockStart;
-
-        if (meetingOverlapsBlock) {
-          const dateKey = formatDateKey(startTime);
-          const block = document.querySelector(
-            `.heatmap-block[data-hour="${hour}"][data-date^="${dateKey}"]`
-          );
-
-          if (block) {
-            // Determine if this is a short meeting
-            const isShortMeeting = durationMinutes < 60;
-
-            if (isShortMeeting) {
-              // Only mark as short if not already marked as full
-              if (!block.classList.contains('has-meeting')) {
-                block.classList.remove('empty');
-                block.classList.add('short-meeting');
-              }
-            } else {
-              // Full meeting or multiple meetings - always mark as has-meeting
-              block.classList.remove('empty', 'short-meeting');
-              block.classList.add('has-meeting');
-            }
-          }
-        }
-      });
-    });
-  } else {
-    // Fallback to cached data if Outlook not available
-    for (let dayOffset = 0; dayOffset < days; dayOffset++) {
-      const date = new Date(currentWeekStart);
-      date.setDate(date.getDate() + dayOffset);
-      const dateKey = formatDateKey(date);
-
+    } else {
+      // Try disk cache
       const cacheResult = await window.electronAPI.getCachedEvents(dateKey);
-
-      if (cacheResult.success && Array.isArray(cacheResult.events)) {
-        cacheResult.events.forEach(event => {
-          const startTime = new Date(event.start);
-          const endTime = new Date(event.end);
-          const durationMinutes = (endTime - startTime) / 60000;
-
-          hours.forEach(hour => {
-            // Check if this hour block overlaps with the meeting
-            const blockStart = new Date(startTime);
-            blockStart.setHours(hour, 0, 0, 0);
-            const blockEnd = new Date(blockStart);
-            blockEnd.setHours(hour + 1, 0, 0, 0);
-
-            const meetingOverlapsBlock = startTime < blockEnd && endTime > blockStart;
-
-            if (meetingOverlapsBlock) {
-              const block = document.querySelector(
-                `.heatmap-block[data-hour="${hour}"][data-date^="${dateKey}"]`
-              );
-
-              if (block) {
-                const isShortMeeting = durationMinutes < 60;
-
-                if (isShortMeeting) {
-                  if (!block.classList.contains('has-meeting')) {
-                    block.classList.remove('empty');
-                    block.classList.add('short-meeting');
-                  }
-                } else {
-                  block.classList.remove('empty', 'short-meeting');
-                  block.classList.add('has-meeting');
-                }
-              }
-            }
-          });
-        });
+      if (cacheResult.success && Array.isArray(cacheResult.events) && cacheResult.fromCache) {
+        allEvents.push(...cacheResult.events);
+        sessionCache.set(dateKey, cacheResult.events);
       }
+      needsOutlookSync = true; // Missing from session, need to sync
     }
   }
+
+  // Display cached events immediately
+  if (allEvents.length > 0) {
+    console.log(`✓ Week view: ${allEvents.length} events from cache`);
+    renderHeatmapEvents(allEvents, weekStart, hours);
+  }
+
+  // Only query Outlook if cache is stale/missing AND we should sync
+  if (needsOutlookSync && sessionCache.shouldSyncOutlook()) {
+    console.log(`⟳ Week view: syncing with Outlook...`);
+
+    const result = await window.electronAPI.getEvents(weekStart, weekEnd);
+
+    if (result.success && Array.isArray(result.events)) {
+      // Cache the events by day
+      const eventsByDay = {};
+      result.events.forEach(event => {
+        const eventDate = new Date(event.start);
+        const dateKey = formatDateKey(eventDate);
+        if (!eventsByDay[dateKey]) {
+          eventsByDay[dateKey] = [];
+        }
+        eventsByDay[dateKey].push(event);
+      });
+
+      // Update session cache
+      Object.keys(eventsByDay).forEach(dateKey => {
+        sessionCache.set(dateKey, eventsByDay[dateKey]);
+      });
+      sessionCache.markOutlookSynced();
+
+      // Save to disk
+      await window.electronAPI.saveEventsRangeCache(eventsByDay);
+
+      // Re-render with fresh data
+      renderHeatmapEvents(result.events, weekStart, hours);
+      console.log(`✓ Week view: synced ${result.events.length} events`);
+    }
+  }
+}
+
+// Helper: render events on heatmap grid
+function renderHeatmapEvents(events, weekStart, hours) {
+  events.forEach(event => {
+    const startTime = new Date(event.start);
+    const endTime = new Date(event.end);
+    const durationMinutes = (endTime - startTime) / 60000;
+
+    // Calculate which day of the week this is
+    const daysDiff = Math.floor((startTime - weekStart) / (1000 * 60 * 60 * 24));
+    if (daysDiff < 0 || daysDiff > 6) return;
+
+    // Mark the hour blocks this meeting occupies (8am-5pm)
+    hours.forEach(hour => {
+      const blockStart = new Date(startTime);
+      blockStart.setHours(hour, 0, 0, 0);
+      const blockEnd = new Date(blockStart);
+      blockEnd.setHours(hour + 1, 0, 0, 0);
+
+      const meetingOverlapsBlock = startTime < blockEnd && endTime > blockStart;
+
+      if (meetingOverlapsBlock) {
+        const dateKey = formatDateKey(startTime);
+        const block = document.querySelector(
+          `.heatmap-block[data-hour="${hour}"][data-date^="${dateKey}"]`
+        );
+
+        if (block) {
+          const isShortMeeting = durationMinutes < 60;
+
+          if (isShortMeeting) {
+            if (!block.classList.contains('has-meeting')) {
+              block.classList.remove('empty');
+              block.classList.add('short-meeting');
+            }
+          } else {
+            block.classList.remove('empty', 'short-meeting');
+            block.classList.add('has-meeting');
+          }
+        }
+      }
+    });
+  });
 }
 
 // Handle clicking on a heatmap block - jump to that day in calendar
@@ -2008,27 +2367,35 @@ function applyEventHighlight(clickedHour) {
   const eventCards = document.querySelectorAll('.event-card');
   let foundEvent = false;
 
+  console.log(`🔍 Searching ${eventCards.length} cards for event at hour ${clickedHour}`);
+
   eventCards.forEach(card => {
     const eventStart = card.dataset.eventStart;
     if (eventStart) {
       const startDate = new Date(eventStart);
-      const startHour = startDate.getHours();
-
-      // Check if this event includes the clicked hour
       const eventEnd = card.dataset.eventEnd;
       const endDate = new Date(eventEnd);
-      const endHour = endDate.getHours();
 
-      if (clickedHour >= startHour && clickedHour < endHour) {
+      // Use same overlap logic as heatmap: event overlaps the clicked hour block
+      // (handles sub-hour meetings where startHour === endHour)
+      const startMins = startDate.getHours() * 60 + startDate.getMinutes();
+      const endMins = endDate.getHours() * 60 + endDate.getMinutes();
+      const blockStartMins = clickedHour * 60;
+      const blockEndMins = (clickedHour + 1) * 60;
+
+      if (startMins < blockEndMins && endMins > blockStartMins) {
         // Add glow effect
         card.classList.add('event-glow');
         foundEvent = true;
+
+        console.log(`✅ Found event: "${card.querySelector('.event-title')?.textContent}" (${Math.floor(startMins/60)}:${String(startMins%60).padStart(2,'0')}-${Math.floor(endMins/60)}:${String(endMins%60).padStart(2,'0')}`);
 
         // Scroll to the event
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         // Remove glow after 5 seconds
         setTimeout(() => {
+          console.log(`🌟 Removing glow from event`);
           card.classList.remove('event-glow');
         }, 5000);
       }
@@ -2036,7 +2403,7 @@ function applyEventHighlight(clickedHour) {
   });
 
   if (!foundEvent) {
-    console.log(`No event found for hour ${clickedHour}`);
+    console.log(`❌ No event found for hour ${clickedHour}`);
   }
 }
 
@@ -2065,6 +2432,103 @@ function setTheme(themeName, save = true) {
 function toggleThemePicker() {
   const picker = document.getElementById('theme-picker');
   picker.classList.toggle('hidden');
+}
+
+// ===== TAB ORDER FUNCTIONS =====
+
+function loadTabOrder() {
+  const saved = localStorage.getItem('calendar-tab-order');
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      const validTabs = ['calendar', 'weekview', 'actions'];
+      if (Array.isArray(parsed) && parsed.length === 3 &&
+          validTabs.every(t => parsed.includes(t))) {
+        tabOrder = parsed;
+      }
+    } catch (e) {
+      // Invalid data — keep default order
+    }
+  }
+  applyTabOrder();
+}
+
+function applyTabOrder() {
+  const tabNav = document.querySelector('.tab-nav');
+  const refreshBtn = document.getElementById('refresh-btn');
+  tabOrder.forEach(tabName => {
+    const btn = document.getElementById(`${tabName}-tab`);
+    if (btn) tabNav.insertBefore(btn, refreshBtn);
+  });
+}
+
+function saveTabOrder() {
+  const tabNav = document.querySelector('.tab-nav');
+  const buttons = tabNav.querySelectorAll('.tab-btn:not(.tab-btn-icon-only)');
+  tabOrder = Array.from(buttons).map(btn => btn.id.replace('-tab', ''));
+  localStorage.setItem('calendar-tab-order', JSON.stringify(tabOrder));
+}
+
+function initTabDragAndDrop() {
+  const tabNav = document.querySelector('.tab-nav');
+  const getDraggableTabs = () => tabNav.querySelectorAll('.tab-btn:not(.tab-btn-icon-only)');
+  let draggedTab = null;
+
+  function clearDragIndicators() {
+    getDraggableTabs().forEach(btn => btn.classList.remove('drag-over-left', 'drag-over-right'));
+  }
+
+  getDraggableTabs().forEach(tab => {
+    tab.setAttribute('draggable', 'true');
+
+    tab.addEventListener('dragstart', (e) => {
+      draggedTab = tab;
+      tab.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tab.id);
+    });
+
+    tab.addEventListener('dragend', () => {
+      tab.classList.remove('dragging');
+      clearDragIndicators();
+      draggedTab = null;
+    });
+
+    tab.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!draggedTab || draggedTab === tab) return;
+      e.dataTransfer.dropEffect = 'move';
+      clearDragIndicators();
+      const rect = tab.getBoundingClientRect();
+      if (e.clientX < rect.left + rect.width / 2) {
+        tab.classList.add('drag-over-left');
+      } else {
+        tab.classList.add('drag-over-right');
+      }
+    });
+
+    tab.addEventListener('dragleave', (e) => {
+      // Only clear if leaving to outside the tab nav
+      if (!tabNav.contains(e.relatedTarget)) {
+        clearDragIndicators();
+      }
+      tab.classList.remove('drag-over-left', 'drag-over-right');
+    });
+
+    tab.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!draggedTab || draggedTab === tab) return;
+      const rect = tab.getBoundingClientRect();
+      const insertBefore = e.clientX < rect.left + rect.width / 2;
+      if (insertBefore) {
+        tabNav.insertBefore(draggedTab, tab);
+      } else {
+        tabNav.insertBefore(draggedTab, tab.nextElementSibling);
+      }
+      clearDragIndicators();
+      saveTabOrder();
+    });
+  });
 }
 
 // ===== UTILITY FUNCTIONS =====
