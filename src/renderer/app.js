@@ -21,6 +21,7 @@ let countdownInterval = null;
 
 // Week view state
 let currentWeekStart = null; // Will be set to Monday of current week
+let highlightEventAtHour = null; // Hour to highlight when navigating from heatmap
 
 // Initialize the app
 async function init() {
@@ -596,6 +597,7 @@ function displayEvents(events) {
   if (events.length === 0) {
     eventsList.innerHTML = '<div class="no-events">No meetings scheduled for this day</div>';
     resetCardSelection();
+    highlightEventAtHour = null; // Clear highlight target
     return;
   }
 
@@ -614,6 +616,14 @@ function displayEvents(events) {
 
   // Start / restart the per-minute countdown refresh
   startCountdownTimer();
+
+  // Apply highlight if navigating from heatmap
+  if (highlightEventAtHour !== null) {
+    setTimeout(() => {
+      applyEventHighlight(highlightEventAtHour);
+      highlightEventAtHour = null; // Clear after applying
+    }, 200);
+  }
 }
 
 // ===== COUNTDOWN HELPERS =====
@@ -1416,7 +1426,7 @@ async function populateHeatmap() {
 // Handle clicking on a heatmap block - jump to that day in calendar
 async function handleHeatmapBlockClick(blockDate) {
   // Store the clicked hour for highlighting
-  const clickedHour = blockDate.getHours();
+  highlightEventAtHour = blockDate.getHours();
 
   // Set the current date to the clicked block's date
   currentDate = new Date(blockDate);
@@ -1425,38 +1435,45 @@ async function handleHeatmapBlockClick(blockDate) {
   // Switch to calendar tab
   switchTab('calendar');
 
-  // Load events for that day
+  // Load events for that day (displayEvents will handle highlighting)
   await loadEvents();
+}
 
-  // Find and highlight the event at the clicked time
-  setTimeout(() => {
-    const eventCards = document.querySelectorAll('.event-card');
-    eventCards.forEach(card => {
-      const eventStart = card.dataset.eventStart;
-      if (eventStart) {
-        const startDate = new Date(eventStart);
-        const startHour = startDate.getHours();
+// Apply highlight to event at specific hour
+function applyEventHighlight(clickedHour) {
+  const eventCards = document.querySelectorAll('.event-card');
+  let foundEvent = false;
 
-        // Check if this event includes the clicked hour
-        const eventEnd = card.dataset.eventEnd;
-        const endDate = new Date(eventEnd);
-        const endHour = endDate.getHours();
+  eventCards.forEach(card => {
+    const eventStart = card.dataset.eventStart;
+    if (eventStart) {
+      const startDate = new Date(eventStart);
+      const startHour = startDate.getHours();
 
-        if (clickedHour >= startHour && clickedHour < endHour) {
-          // Add glow effect
-          card.classList.add('event-glow');
+      // Check if this event includes the clicked hour
+      const eventEnd = card.dataset.eventEnd;
+      const endDate = new Date(eventEnd);
+      const endHour = endDate.getHours();
 
-          // Scroll to the event
-          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (clickedHour >= startHour && clickedHour < endHour) {
+        // Add glow effect
+        card.classList.add('event-glow');
+        foundEvent = true;
 
-          // Remove glow after 5 seconds
-          setTimeout(() => {
-            card.classList.remove('event-glow');
-          }, 5000);
-        }
+        // Scroll to the event
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Remove glow after 5 seconds
+        setTimeout(() => {
+          card.classList.remove('event-glow');
+        }, 5000);
       }
-    });
-  }, 300); // Wait for events to render
+    }
+  });
+
+  if (!foundEvent) {
+    console.log(`No event found for hour ${clickedHour}`);
+  }
 }
 
 // ===== UTILITY FUNCTIONS =====
