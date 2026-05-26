@@ -333,6 +333,12 @@ body {
   flex-direction: column;
 }
 
+/* Disable scroll fade masks for week view */
+#weekview-content.tab-content::before,
+#weekview-content.tab-content::after {
+  display: none;
+}
+
 /* Scroll fade masks */
 .tab-content::before,
 .tab-content::after {

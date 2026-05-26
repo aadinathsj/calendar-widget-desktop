@@ -910,7 +910,14 @@ async function loadEvents(forceRefresh = false) {
 function displayEvents(events) {
   const eventsList = document.getElementById('events-list');
 
-  if (events.length === 0) {
+  // Filter out past meetings (only show in-progress and upcoming)
+  const now = new Date();
+  const activeEvents = events.filter(event => {
+    const endTime = new Date(event.end);
+    return now <= endTime; // Only show events that haven't ended yet
+  });
+
+  if (activeEvents.length === 0) {
     eventsList.innerHTML = '<div class="no-events">No meetings scheduled for this day</div>';
     resetCardSelection();
     if (highlightTimeout) clearTimeout(highlightTimeout);
@@ -922,7 +929,7 @@ function displayEvents(events) {
 
   eventsList.innerHTML = '';
 
-  events.forEach(event => {
+  activeEvents.forEach(event => {
     const eventCard = createEventCard(event);
     eventsList.appendChild(eventCard);
   });
@@ -1003,13 +1010,34 @@ function startCountdownTimer() {
 }
 
 function updateAllCountdowns() {
+  const now = new Date();
+  let hasEndedMeeting = false;
+
   document.querySelectorAll('.event-card[data-event-start]').forEach(card => {
     const el = card.querySelector('.event-countdown');
     if (!el) return;
+
+    const endTime = new Date(card.dataset.eventEnd);
+
+    // Check if this meeting has ended
+    if (now > endTime) {
+      hasEndedMeeting = true;
+      return;
+    }
+
     const { text, cls } = getCountdownText(card.dataset.eventStart, card.dataset.eventEnd);
     el.textContent = text;
     el.className = `event-countdown event-countdown--${cls}`;
   });
+
+  // If any meeting has ended, reload the events to remove it from the display
+  if (hasEndedMeeting && currentTab === 'calendar') {
+    const dateKey = formatDateKey(currentDate);
+    if (sessionCache.has(dateKey)) {
+      const cached = sessionCache.get(dateKey);
+      displayEvents(cached.events);
+    }
+  }
 }
 
 function createEventCard(event) {
